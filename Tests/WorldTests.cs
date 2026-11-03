@@ -55,11 +55,11 @@ public class WorldTests
     }
 
     [Fact]
-    public void Step_ReturnsNoEventsYet()
+    public void Step_WithNoCommands_ReturnsNoEvents()
     {
         var engine = new SimEngine(NewWorld());
 
-        Assert.Empty(engine.Step());
+        Assert.Empty(engine.Step().Events);
     }
 
     [Fact]
