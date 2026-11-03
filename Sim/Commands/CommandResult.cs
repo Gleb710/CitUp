@@ -12,6 +12,7 @@ public sealed record CommandResult(int CommandId, CommandError Error)
         CommandError.OutOfBounds => "Клетка вне карты",
         CommandError.UnknownType => "Неизвестный тип здания",
         CommandError.CellOccupied => "Клетка занята",
+        CommandError.CellBlockedByResident => "Клетка на пути жителя",
         _ => "Неизвестная ошибка"
     };
 }
