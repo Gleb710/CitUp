@@ -1,0 +1,84 @@
+using CitUp.Sim;
+using Xunit;
+
+namespace Tests;
+
+public class WorldTests
+{
+    private static World NewWorld() => new(WorldConfig.LoadDefault());
+
+    [Fact]
+    public void Config_LoadsFromEmbeddedJson()
+    {
+        var config = WorldConfig.LoadDefault();
+
+        Assert.Equal(32, config.Map.Width);
+        Assert.Equal(32, config.Map.Height);
+        Assert.Equal(10, config.TicksPerSecond);
+        Assert.Equal(3, config.BuildingTypes.Count);
+        Assert.NotNull(config.FindBuildingType("house"));
+    }
+
+    [Fact]
+    public void NewWorld_HasConfiguredSize_AndTickZero()
+    {
+        var world = NewWorld();
+
+        Assert.Equal(32, world.Width);
+        Assert.Equal(32, world.Height);
+        Assert.Equal(0, world.CurrentTick);
+    }
+
+    [Theory]
+    [InlineData(0, 0, true)]
+    [InlineData(31, 31, true)]
+    [InlineData(-1, 0, false)]
+    [InlineData(0, -1, false)]
+    [InlineData(32, 0, false)]
+    [InlineData(0, 32, false)]
+    public void IsInside_ChecksMapBounds(int x, int y, bool expected)
+    {
+        Assert.Equal(expected, NewWorld().IsInside(new Cell(x, y)));
+    }
+
+    [Fact]
+    public void Step_100Times_GivesTick100_WhichIs10Seconds()
+    {
+        var world = NewWorld();
+        var engine = new SimEngine(world);
+
+        for (int i = 0; i < 100; i++)
+            engine.Step();
+
+        Assert.Equal(100, world.CurrentTick);
+        Assert.Equal(10, world.CurrentTick / world.Config.TicksPerSecond);
+    }
+
+    [Fact]
+    public void Step_ReturnsNoEventsYet()
+    {
+        var engine = new SimEngine(NewWorld());
+
+        Assert.Empty(engine.Step());
+    }
+
+    [Fact]
+    public void FromJson_BrokenJson_ThrowsClearError()
+    {
+        var ex = Assert.Throws<InvalidDataException>(() => WorldConfig.FromJson("{ not json"));
+
+        Assert.Contains("JSON", ex.Message);
+    }
+
+    [Fact]
+    public void FromJson_ZeroMapWidth_Throws()
+    {
+        const string json = """
+            { "map": { "width": 0, "height": 32 }, "ticksPerSecond": 10,
+              "resident": { "ticksPerCell": 5, "pauseTicks": 20 },
+              "buildingTypes": [ { "id": "house", "name": "Дом", "color": "#fff" } ] }
+            """;
+
+        Assert.Throws<InvalidDataException>(() => WorldConfig.FromJson(json));
+    }
+}

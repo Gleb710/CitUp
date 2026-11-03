@@ -4,6 +4,11 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RootNamespace>CitUp.Sim</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+  <EmbeddedResource Include="..\Data\*.json" LogicalName="Data.%(Filename)%(Extension)" />
+  </ItemGroup>
 
 </Project>

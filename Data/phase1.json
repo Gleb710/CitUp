@@ -1,0 +1,10 @@
+{
+  "map": { "width": 32, "height": 32 },
+  "ticksPerSecond": 10,
+  "resident": { "ticksPerCell": 5, "pauseTicks": 20 },
+  "buildingTypes": [
+    { "id": "house",      "name": "Дом",      "color": "#c0504d" },
+    { "id": "woodcutter", "name": "Дровосек", "color": "#4f8a3c" },
+    { "id": "well",       "name": "Колодец",  "color": "#3c78c0" }
+  ]
+}
