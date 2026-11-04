@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://colptwr3kbc1a" path="res://WorldView.cs" id="2_fos0i"]
 [ext_resource type="Script" uid="uid://dwi1qwhbn6p8x" path="res://CameraController.cs" id="3_3dxm6"]
 [ext_resource type="Script" uid="uid://dqf3vr01o6x8x" path="res://SimRunner.cs" id="4_lgr22"]
+[ext_resource type="Script" uid="uid://ccsoua5i3pmnl" path="res://Hud.cs" id="5_fos0i"]
 
 [node name="Main" type="Node2D" unique_id=1858005244]
 script = ExtResource("1_cm0pq")
@@ -18,9 +19,18 @@ script = ExtResource("3_3dxm6")
 script = ExtResource("4_lgr22")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=360549843]
+script = ExtResource("5_fos0i")
 
 [node name="InfoLabel" type="Label" parent="CanvasLayer" unique_id=498348162]
 offset_right = 40.0
 offset_bottom = 23.0
 theme_override_font_sizes/font_size = 20
 metadata/_edit_use_anchors_ = true
+
+[node name="HintLabel" type="Label" parent="CanvasLayer" unique_id=1442185083]
+offset_right = 40.0
+offset_bottom = 23.0
+
+[node name="MessageLabel" type="Label" parent="CanvasLayer" unique_id=1783988828]
+offset_right = 40.0
+offset_bottom = 23.0
