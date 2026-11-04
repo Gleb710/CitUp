@@ -2,13 +2,14 @@ using Godot;
 
 namespace CitUp.Game;
 
-/// <summary>Надписи поверх мира: подсказка по выбору здания и сообщения об отказах. Висит на узле CanvasLayer.</summary>
+/// <summary>Надписи поверх мира: подсказка по выбору здания, сообщения об отказах и статус сети. Висит на узле CanvasLayer.</summary>
 public partial class Hud : CanvasLayer
 {
     private const double MessageSeconds = 2.0;
 
     private Label _hint = null!;
     private Label _message = null!;
+    private Label _status = null!;
     private double _messageLeft;
 
     public override void _Ready()
@@ -17,13 +18,19 @@ public partial class Hud : CanvasLayer
         _hint = GetNode<Label>("HintLabel");
         _message = GetNode<Label>("MessageLabel");
 
-        // Три строки одна под другой, у каждой крупный шрифт и тёмная обводка для читаемости на зелёном
+        // Строка статуса сети создаётся здесь же, в сцену добавлять её не нужно
+        _status = new Label();
+        AddChild(_status);
+
+        // Четыре строки одна под другой, у каждой крупный шрифт и тёмная обводка для читаемости на зелёном
         Place(info, 8f);
         Place(_hint, 36f);
         Place(_message, 64f);
+        Place(_status, 92f);
 
         _message.Text = "";
         _message.AddThemeColorOverride("font_color", new Color(1f, 0.6f, 0.5f));
+        _status.AddThemeColorOverride("font_color", new Color(0.7f, 0.95f, 1f));
     }
 
     private static void Place(Label label, float y)
@@ -52,6 +59,9 @@ public partial class Hud : CanvasLayer
         _message.Text = text;
         _messageLeft = MessageSeconds;
     }
+
+    /// <summary>Постоянная строка про состояние сети (режим, адреса, пинг).</summary>
+    public void SetNetStatus(string text) => _status.Text = text;
 
     public override void _Process(double delta)
     {
