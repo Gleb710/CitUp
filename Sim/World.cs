@@ -102,6 +102,53 @@ public sealed class World
         resident.Path = null;
     }
 
+    /// <summary>Снимок текущего состояния. Списки копируются, поэтому снимок не меняется при дальнейшей игре.</summary>
+    public WorldSnapshot ToSnapshot() => new(
+        CurrentTick,
+        NextBuildingId,
+        _buildings.ToList(),
+        _residents.Select(r => new ResidentSnapshot(r.Id, r.Cell, r.Path?.ToList(), r.WalkStartTick)).ToList());
+
+    /// <summary>Создаёт мир из снимка. Конфиг должен быть тем же, что у хоста.</summary>
+    public static World FromSnapshot(WorldConfig config, WorldSnapshot snapshot)
+    {
+        var world = new World(config);
+        world.LoadSnapshot(snapshot);
+        return world;
+    }
+
+    private void LoadSnapshot(WorldSnapshot snapshot)
+    {
+        CurrentTick = snapshot.Tick;
+        NextBuildingId = snapshot.NextBuildingId;
+
+        _buildings.Clear();
+        _buildingByCell.Clear();
+        _residents.Clear();   // конструктор уже создал жителя по умолчанию, в снимке жители свои
+
+        foreach (var building in snapshot.Buildings)
+        {
+            if (!IsInside(building.Cell))
+                throw new InvalidDataException($"Снимок: здание {building.Id} вне карты, клетка {building.Cell}.");
+            if (!_buildingByCell.TryAdd(building.Cell, building))
+                throw new InvalidDataException($"Снимок: две постройки в одной клетке {building.Cell}.");
+            _buildings.Add(building);
+        }
+
+        foreach (var data in snapshot.Residents)
+        {
+            var resident = new Resident(data.Id, data.Cell);
+            if (data.Path is { Count: > 0 })
+            {
+                if (data.Path[0] != data.Cell)
+                    throw new InvalidDataException($"Снимок: путь жителя {data.Id} не начинается с его клетки.");
+                resident.Path = data.Path;
+                resident.WalkStartTick = data.WalkStartTick;
+            }
+            _residents.Add(resident);
+        }
+    }
+    
     // internal: двигать время может только SimEngine из этой же сборки
     internal void AdvanceTick() => CurrentTick++;
 }
