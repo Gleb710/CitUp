@@ -18,9 +18,10 @@ public partial class Main : Node2D
     private MenuPanel _menu = null!;
     private ResidentView? _residentView;
 
-    // Одиночная игра и хост: есть World и SimEngine. Клиент: только World по снимку, SimEngine у него нет.
+    // Одиночная игра и хост: есть World, SimEngine и учёт команд. Клиент: только World по снимку.
     private World? _world;
     private SimEngine? _sim;
+    private CommandRouter? _router;
 
     // Только хост
     private PlayerRegistry? _players;
@@ -30,12 +31,13 @@ public partial class Main : Node2D
 
     // Только клиент
     private ClientClock? _clock;
+    private bool _connectionLost;
+    private int _nextCommandId = 1;   // нумерация команд этого клиента
 
     private int _localPlayerId = PlayerRegistry.HostPlayerId;
     private string _playerName = "Игрок";
     private string _role = "меню";
     private int _selectedTypeIndex;
-    private int _nextCommandId = 1;
 
     public override void _Ready()
     {
@@ -124,6 +126,7 @@ public partial class Main : Node2D
         var config = WorldConfig.LoadDefault();
         _world = new World(config);
         _sim = new SimEngine(_world, seed: Random.Shared.Next());
+        _router = new CommandRouter();
         _runner.Bind(_sim);
 
         ShowWorld(_world, () => _runner.RenderTick);
@@ -158,6 +161,8 @@ public partial class Main : Node2D
         if (!_net.IsHost)
             return;
 
+        _router?.Forget(peerId);
+
         if (_playerByPeer.Remove(peerId, out int playerId) && _players is not null)
         {
             string name = _players.NameOf(playerId) ?? "Игрок";
@@ -191,6 +196,7 @@ public partial class Main : Node2D
     private void OnHostLost()
     {
         _clock = null;   // часы встали, житель замер: мир больше не обновляется
+        _connectionLost = true;
         _hud.SetNetStatus("Связь с хостом потеряна");
         _hud.ShowMessage("Связь с хостом потеряна");
         Log("связь с хостом потеряна");
@@ -198,7 +204,9 @@ public partial class Main : Node2D
 
     private void OnMessageReceived(int peerId, NetMessage message)
     {
-        Log($"сообщение {message.GetType().Name} от пира {peerId}");
+        // Рассылку событий не пишем в журнал: она идёт постоянно
+        if (message is not EventsMessage)
+            Log($"сообщение {message.GetType().Name} от пира {peerId}");
 
         if (_net.IsHost)
             HandleHostMessage(peerId, message);
@@ -219,13 +227,21 @@ public partial class Main : Node2D
         }
 
         // Пока пир не прошёл Hello, его сообщения не принимаются вообще
-        if (!_playerByPeer.ContainsKey(peerId))
+        if (!_playerByPeer.TryGetValue(peerId, out int playerId))
         {
             Log($"сообщение {message.GetType().Name} от пира {peerId} проигнорировано: Hello не пройден");
             return;
         }
 
-        // Команды игроков обрабатываются в Issue 10
+        switch (message)
+        {
+            case CommandMessage command:
+                HandleCommand(peerId, playerId, command.Command);
+                break;
+            default:
+                Log($"неожиданное сообщение {message.GetType().Name} от игрока {playerId}");
+                break;
+        }
     }
 
     private void HandleHello(int peerId, HelloMessage hello)
@@ -253,6 +269,8 @@ public partial class Main : Node2D
             return;
         }
 
+        // Сначала запоминаем пира, затем шлём снимок: все события следующих тиков он уже получит.
+        // Между этими строками тик пройти не может: всё идёт в одном кадре.
         _playerByPeer[peerId] = join.PlayerId;
 
         var welcome = new WelcomeMessage(join.PlayerId, _world.ToSnapshot());
@@ -271,6 +289,54 @@ public partial class Main : Node2D
 
         // Клиент уходит сам, получив отказ; если не ушёл, через секунду отключаем его принудительно
         GetTree().CreateTimer(1.0).Timeout += () => _net.Kick(peerId);
+    }
+
+    /// <summary>Команда клиента. Игрок определяется по соединению, поле PlayerId из сообщения игнорируется.</summary>
+    private void HandleCommand(int peerId, int playerId, BuildCommand incoming)
+    {
+        if (_sim is null || _router is null)
+            return;
+
+        // Из сети может прийти что угодно, в том числе пустая команда
+        if (incoming is null)
+        {
+            Log($"пустая команда от игрока {playerId} проигнорирована");
+            return;
+        }
+
+        int hostCommandId = _router.Register(peerId, incoming.CommandId);
+        _sim.Enqueue(new BuildCommand(hostCommandId, playerId, incoming.BuildingType, incoming.Cell));
+        Log($"команда игрока {playerId}: {incoming.BuildingType} в {incoming.Cell}");
+    }
+
+    /// <summary>Хост: рассылает события тика всем игрокам, прошедшим Hello.</summary>
+    private void BroadcastEvents(IReadOnlyList<SimEvent> events)
+    {
+        if (_world is null || events.Count == 0 || _playerByPeer.Count == 0)
+            return;
+
+        var message = new EventsMessage(_world.CurrentTick, events);
+        foreach (int peerId in _playerByPeer.Keys)
+            _net.Send(peerId, message);
+    }
+
+    /// <summary>Отправляет автору команды итог: локальному игроку показывает в HUD, клиенту шлёт отказ по сети.</summary>
+    private void RouteResult(CommandResult result)
+    {
+        if (_router is null || !_router.TryComplete(result.CommandId, out int sourceId, out int sourceCommandId))
+            return;
+
+        if (result.Ok)
+            return;
+
+        if (sourceId == CommandRouter.LocalSource)
+        {
+            _hud.ShowMessage(result.Message);
+            return;
+        }
+
+        if (_playerByPeer.ContainsKey(sourceId))
+            _net.Send(sourceId, new CommandRejectedMessage(sourceCommandId, result.Error));
     }
 
     private void RefreshHostStatus()
@@ -294,6 +360,12 @@ public partial class Main : Node2D
                 break;
             case JoinRejectedMessage rejected:
                 OnJoinRejected(rejected);
+                break;
+            case EventsMessage events:
+                ApplyHostEvents(events);
+                break;
+            case CommandRejectedMessage rejected:
+                _hud.ShowMessage(new CommandResult(rejected.CommandId, rejected.Error).Message);
                 break;
             default:
                 Log($"неожиданное сообщение {message.GetType().Name}");
@@ -319,14 +391,16 @@ public partial class Main : Node2D
 
         _localPlayerId = welcome.PlayerId;
         _world = world;
-        _sim = null;   // у клиента нет движка: мир меняется только событиями хоста
+        _sim = null;      // у клиента нет движка: мир меняется только событиями хоста
+        _router = null;
+        _connectionLost = false;
 
         var clock = new ClientClock(world.Config.TicksPerSecond, world.CurrentTick);
         _clock = clock;
 
         ShowWorld(world, () => clock.RenderTick);
         _menu.CloseMenu();
-        _hud.SetNetStatus($"Клиент: вы игрок {_localPlayerId} ({_playerName}). Строить пока нельзя.");
+        _hud.SetNetStatus($"Клиент: вы игрок {_localPlayerId} ({_playerName})");
         GetWindow().Title = "CitUp: клиент";
         Log($"мир получен: {world.Buildings.Count} зданий, тик {world.CurrentTick}, вы игрок {_localPlayerId}");
     }
@@ -337,6 +411,30 @@ public partial class Main : Node2D
         _net.Shutdown();
         _role = "меню";
         _menu.SetStatus($"Хост отклонил подключение: {rejected.Reason}");
+    }
+
+    /// <summary>Клиент: применяет события хоста к своей копии мира в том же порядке, в каком они пришли.</summary>
+    private void ApplyHostEvents(EventsMessage message)
+    {
+        if (_world is null)
+            return;
+
+        try
+        {
+            foreach (var simEvent in message.Events)
+                _world.Apply(simEvent);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            // Хост не должен присылать такие события: значит, миры разошлись. Автоматическое лечение добавим в Issue 12.
+            Log($"РАССИНХРОН при применении событий тика {message.Tick}: {ex.Message}");
+            _hud.ShowMessage("Рассинхрон миров. Переподключитесь к хосту.");
+            _hud.SetNetStatus("Рассинхрон: переподключитесь к хосту");
+            return;
+        }
+
+        if (message.Events.Count > 0)
+            _view.QueueRedraw();
     }
 
     // ---------- ввод и отображение ----------
@@ -364,14 +462,6 @@ public partial class Main : Node2D
         if (_world is null)
             return;
 
-        // Клиент пока только смотрит: команды хосту он начнёт отправлять в Issue 10
-        if (_sim is null)
-        {
-            if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
-                _hud.ShowMessage("Клиент пока не может строить");
-            return;
-        }
-
         if (@event is InputEventKey { Pressed: true, Echo: false } key)
         {
             int index = key.Keycode switch
@@ -391,25 +481,50 @@ public partial class Main : Node2D
         else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
         {
             var cell = IsoGrid.PointToCell(GetGlobalMousePosition());
-            if (!_world.IsInside(cell))
-                return;
-
-            // Игрок не меняет мир сам: он только отправляет команду. Решает Sim на ближайшем тике.
-            var typeId = _world.Config.BuildingTypes[_selectedTypeIndex].Id;
-            _sim.Enqueue(new BuildCommand(_nextCommandId++, _localPlayerId, typeId, cell));
+            if (_world.IsInside(cell))
+                SubmitBuild(cell);
         }
     }
 
-    /// <summary>Вызывается после каждого тика симуляции.</summary>
+    /// <summary>
+    /// Игрок не меняет мир сам: он только отправляет команду.
+    /// Хост и одиночная игра ставят её в очередь движка, клиент отправляет хосту.
+    /// </summary>
+    private void SubmitBuild(Cell cell)
+    {
+        var typeId = _world!.Config.BuildingTypes[_selectedTypeIndex].Id;
+
+        if (_net.IsClient)
+        {
+            if (_connectionLost)
+            {
+                _hud.ShowMessage("Нет связи с хостом");
+                return;
+            }
+
+            var command = new BuildCommand(_nextCommandId++, _localPlayerId, typeId, cell);
+            _net.SendToHost(new CommandMessage(command));
+            return;
+        }
+
+        if (_sim is null || _router is null)
+            return;
+
+        // Собственные клики хоста идут тем же путём, что и клиентские, только без сети
+        int hostCommandId = _router.Register(CommandRouter.LocalSource, 0);
+        _sim.Enqueue(new BuildCommand(hostCommandId, _localPlayerId, typeId, cell));
+    }
+
+    /// <summary>Вызывается после каждого тика симуляции (у одиночной игры и у хоста).</summary>
     private void OnStepped(StepResult result)
     {
         if (result.Events.Count > 0)
             _view.QueueRedraw();
 
+        if (_net.IsHost)
+            BroadcastEvents(result.Events);
+
         foreach (var commandResult in result.Results)
-        {
-            if (!commandResult.Ok)
-                _hud.ShowMessage(commandResult.Message);
-        }
+            RouteResult(commandResult);
     }
 }
