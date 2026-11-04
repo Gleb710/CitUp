@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using CitUp.Sim;
 using Godot;
 
@@ -7,19 +10,28 @@ namespace CitUp.Game;
 /// <summary>Корень сцены. Показывает меню, запускает режим (одиночный, хост, клиент) и превращает ввод в команды.</summary>
 public partial class Main : Node2D
 {
-    private const int LocalPlayerId = 1;   // у хоста и в одиночной игре игрок номер 1
-
     private WorldView _view = null!;
     private SimRunner _runner = null!;
     private Hud _hud = null!;
     private Label _infoLabel = null!;
     private NetManager _net = null!;
     private MenuPanel _menu = null!;
+    private ResidentView? _residentView;
 
-    // Мир и движок есть у одиночной игры и у хоста; у клиента мир появится после снимка (Issue 9)
+    // Одиночная игра и хост: есть World и SimEngine. Клиент: только World по снимку, SimEngine у него нет.
     private World? _world;
     private SimEngine? _sim;
 
+    // Только хост
+    private PlayerRegistry? _players;
+    private readonly Dictionary<int, int> _playerByPeer = new();   // id соединения → id игрока
+    private int _hostPort;
+    private string _hostAddresses = "";
+
+    // Только клиент
+    private ClientClock? _clock;
+
+    private int _localPlayerId = PlayerRegistry.HostPlayerId;
     private string _playerName = "Игрок";
     private string _role = "меню";
     private int _selectedTypeIndex;
@@ -59,6 +71,7 @@ public partial class Main : Node2D
     private void OnSoloPressed()
     {
         _role = "одиночная";
+        _localPlayerId = PlayerRegistry.HostPlayerId;
         StartWorld();
         _menu.CloseMenu();
         _hud.SetNetStatus("Одиночная игра");
@@ -74,15 +87,20 @@ public partial class Main : Node2D
             return;
         }
 
-        _playerName = playerName;
+        _playerName = PlayerRegistry.CleanName(playerName);
+        _players = new PlayerRegistry();
+        _players.RegisterHost(_playerName);
+        _playerByPeer.Clear();
+        _localPlayerId = PlayerRegistry.HostPlayerId;
+        _hostPort = port;
+        _hostAddresses = string.Join(", ", NetManager.LocalAddresses());
         _role = "хост";
+
         StartWorld();
         _menu.CloseMenu();
-
-        string addresses = string.Join(", ", NetManager.LocalAddresses());
-        _hud.SetNetStatus($"Хост, порт {port}. Адреса для друга: {addresses}");
+        RefreshHostStatus();
         GetWindow().Title = "CitUp: хост";
-        Log($"игра создана, порт {port}, адреса: {addresses}");
+        Log($"игра создана, порт {port}, адреса: {_hostAddresses}");
     }
 
     private void OnJoinPressed(string playerName, string address, int port)
@@ -94,7 +112,7 @@ public partial class Main : Node2D
             return;
         }
 
-        _playerName = playerName;
+        _playerName = PlayerRegistry.CleanName(playerName);
         _role = "клиент";
         _menu.SetStatus($"Подключаюсь к {address}:{port}...");
         Log($"подключение к {address}:{port}");
@@ -106,28 +124,33 @@ public partial class Main : Node2D
         var config = WorldConfig.LoadDefault();
         _world = new World(config);
         _sim = new SimEngine(_world, seed: Random.Shared.Next());
-
-        _view.Bind(_world);
         _runner.Bind(_sim);
 
-        // Слой жителей создаём из кода как дочерний узел WorldView: у него та же система координат
-        var residentView = new ResidentView();
-        _view.AddChild(residentView);
-        residentView.Bind(_world, _runner);
+        ShowWorld(_world, () => _runner.RenderTick);
+    }
 
-        GetNode<Camera2D>("Camera2D").Position = IsoGrid.MapCenter(_world);
-        _hud.ShowSelection(config, _selectedTypeIndex);
+    /// <summary>Показывает мир на экране: общая часть для одиночной игры, хоста и клиента.</summary>
+    private void ShowWorld(World world, Func<double> renderTick)
+    {
+        _view.Bind(world);
+
+        // Слой жителей создаём из кода как дочерний узел WorldView: у него та же система координат.
+        // Если слой уже был (повторный снимок), старый удаляем.
+        _residentView?.QueueFree();
+        _residentView = new ResidentView();
+        _view.AddChild(_residentView);
+        _residentView.Bind(world, renderTick);
+
+        GetNode<Camera2D>("Camera2D").Position = IsoGrid.MapCenter(world);
+        _hud.ShowSelection(world.Config, _selectedTypeIndex);
     }
 
     // ---------- события сети ----------
 
     private void OnPeerJoined(int peerId)
     {
-        if (!_net.IsHost)
-            return;
-
-        Log($"пир {peerId} подключился");
-        _hud.ShowMessage($"Подключился пир {peerId}");
+        if (_net.IsHost)
+            Log($"пир {peerId} подключился, жду Hello");
     }
 
     private void OnPeerLeft(int peerId)
@@ -135,15 +158,23 @@ public partial class Main : Node2D
         if (!_net.IsHost)
             return;
 
-        Log($"пир {peerId} отключился");
-        _hud.ShowMessage($"Пир {peerId} отключился");
+        if (_playerByPeer.Remove(peerId, out int playerId) && _players is not null)
+        {
+            string name = _players.NameOf(playerId) ?? "Игрок";
+            _players.Disconnect(playerId);
+            _hud.ShowMessage($"{name} отключился");
+            RefreshHostStatus();
+            Log($"игрок {playerId} ({name}) отключился");
+        }
+        else
+        {
+            Log($"пир {peerId} ушёл, не пройдя Hello");
+        }
     }
 
     private void OnConnectedToHost()
     {
-        _menu.CloseMenu();
-        _hud.SetNetStatus("Подключён к хосту (мир придёт в Issue 9)");
-        GetWindow().Title = "CitUp: клиент";
+        _menu.SetStatus("Соединение установлено, жду мир...");
         Log("соединение установлено, отправляю Hello");
 
         _net.SendToHost(new HelloMessage(NetProtocol.Version, _playerName));
@@ -152,12 +183,14 @@ public partial class Main : Node2D
     private void OnConnectFailed()
     {
         _net.Shutdown();
+        _role = "меню";
         _menu.SetStatus("Не удалось подключиться. Проверьте адрес, порт и что хост уже запущен.");
         Log("подключиться не удалось");
     }
 
     private void OnHostLost()
     {
+        _clock = null;   // часы встали, житель замер: мир больше не обновляется
         _hud.SetNetStatus("Связь с хостом потеряна");
         _hud.ShowMessage("Связь с хостом потеряна");
         Log("связь с хостом потеряна");
@@ -165,18 +198,155 @@ public partial class Main : Node2D
 
     private void OnMessageReceived(int peerId, NetMessage message)
     {
-        Log($"сообщение от пира {peerId}: {NetSerializer.ToJson(message)}");
+        Log($"сообщение {message.GetType().Name} от пира {peerId}");
 
-        if (_net.IsHost && message is HelloMessage hello)
-            _hud.ShowMessage($"Hello от {hello.PlayerName} (протокол {hello.ProtocolVersion})");
+        if (_net.IsHost)
+            HandleHostMessage(peerId, message);
+        else if (_net.IsClient && peerId == NetManager.HostPeerId)
+            HandleClientMessage(message);
+        else
+            Log($"сообщение от пира {peerId} проигнорировано: клиент принимает сообщения только от хоста");
     }
 
-    private static void Log(string text) => GD.Print(text);
+    // ---------- хост ----------
+
+    private void HandleHostMessage(int peerId, NetMessage message)
+    {
+        if (message is HelloMessage hello)
+        {
+            HandleHello(peerId, hello);
+            return;
+        }
+
+        // Пока пир не прошёл Hello, его сообщения не принимаются вообще
+        if (!_playerByPeer.ContainsKey(peerId))
+        {
+            Log($"сообщение {message.GetType().Name} от пира {peerId} проигнорировано: Hello не пройден");
+            return;
+        }
+
+        // Команды игроков обрабатываются в Issue 10
+    }
+
+    private void HandleHello(int peerId, HelloMessage hello)
+    {
+        if (_world is null || _players is null)
+            return;
+
+        if (_playerByPeer.ContainsKey(peerId))
+        {
+            Log($"повторный Hello от пира {peerId} проигнорирован");
+            return;
+        }
+
+        if (hello.ProtocolVersion != NetProtocol.Version)
+        {
+            Reject(peerId,
+                $"Версия игры не совпадает: у хоста {NetProtocol.Version}, у вас {hello.ProtocolVersion}. Нужна та же сборка игры.");
+            return;
+        }
+
+        var join = _players.Join(hello.PlayerName);
+        if (!join.Ok)
+        {
+            Reject(peerId, join.Error!);
+            return;
+        }
+
+        _playerByPeer[peerId] = join.PlayerId;
+
+        var welcome = new WelcomeMessage(join.PlayerId, _world.ToSnapshot());
+        _net.Send(peerId, welcome);
+
+        string name = _players.NameOf(join.PlayerId) ?? "Игрок";
+        _hud.ShowMessage($"{name} подключился");
+        RefreshHostStatus();
+        Log($"игрок {join.PlayerId} ({name}) принят, снимок: {welcome.Snapshot.Buildings.Count} зданий, тик {welcome.Snapshot.Tick}");
+    }
+
+    private void Reject(int peerId, string reason)
+    {
+        Log($"отказ пиру {peerId}: {reason}");
+        _net.Send(peerId, new JoinRejectedMessage(reason));
+
+        // Клиент уходит сам, получив отказ; если не ушёл, через секунду отключаем его принудительно
+        GetTree().CreateTimer(1.0).Timeout += () => _net.Kick(peerId);
+    }
+
+    private void RefreshHostStatus()
+    {
+        if (_players is null)
+            return;
+
+        string players = string.Join(", ",
+            _players.ConnectedPlayers.Select(p => p.Id == _localPlayerId ? $"{p.Name} (вы)" : p.Name));
+        _hud.SetNetStatus($"Хост, порт {_hostPort}. Игроки: {players}. Адреса: {_hostAddresses}");
+    }
+
+    // ---------- клиент ----------
+
+    private void HandleClientMessage(NetMessage message)
+    {
+        switch (message)
+        {
+            case WelcomeMessage welcome:
+                OnWelcome(welcome);
+                break;
+            case JoinRejectedMessage rejected:
+                OnJoinRejected(rejected);
+                break;
+            default:
+                Log($"неожиданное сообщение {message.GetType().Name}");
+                break;
+        }
+    }
+
+    private void OnWelcome(WelcomeMessage welcome)
+    {
+        World world;
+        try
+        {
+            world = World.FromSnapshot(WorldConfig.LoadDefault(), welcome.Snapshot);
+        }
+        catch (InvalidDataException ex)
+        {
+            Log($"испорченный снимок: {ex.Message}");
+            _net.Shutdown();
+            _role = "меню";
+            _menu.SetStatus($"Хост прислал испорченный мир: {ex.Message}");
+            return;
+        }
+
+        _localPlayerId = welcome.PlayerId;
+        _world = world;
+        _sim = null;   // у клиента нет движка: мир меняется только событиями хоста
+
+        var clock = new ClientClock(world.Config.TicksPerSecond, world.CurrentTick);
+        _clock = clock;
+
+        ShowWorld(world, () => clock.RenderTick);
+        _menu.CloseMenu();
+        _hud.SetNetStatus($"Клиент: вы игрок {_localPlayerId} ({_playerName}). Строить пока нельзя.");
+        GetWindow().Title = "CitUp: клиент";
+        Log($"мир получен: {world.Buildings.Count} зданий, тик {world.CurrentTick}, вы игрок {_localPlayerId}");
+    }
+
+    private void OnJoinRejected(JoinRejectedMessage rejected)
+    {
+        Log($"хост отказал: {rejected.Reason}");
+        _net.Shutdown();
+        _role = "меню";
+        _menu.SetStatus($"Хост отклонил подключение: {rejected.Reason}");
+    }
 
     // ---------- ввод и отображение ----------
 
+    private void Log(string text) => GD.Print($"[{_role}] {text}");
+
     public override void _Process(double delta)
     {
+        _clock?.Advance(delta);
+
         if (_world is null)
         {
             _infoLabel.Text = "";
@@ -184,14 +354,23 @@ public partial class Main : Node2D
         }
 
         string cellText = _view.HoverCell is Cell cell ? $"({cell.X}, {cell.Y})" : "вне карты";
-        _infoLabel.Text = $"Клетка: {cellText}    Тик: {_world.CurrentTick}";
+        long tick = _clock is not null ? (long)_clock.RenderTick : _world.CurrentTick;
+        _infoLabel.Text = $"Клетка: {cellText}    Тик: {tick}";
     }
 
     public override void _UnhandledInput(InputEvent @event)
     {
         // Пока мира нет (меню, клиент без снимка), играть не во что
-        if (_world is null || _sim is null)
+        if (_world is null)
             return;
+
+        // Клиент пока только смотрит: команды хосту он начнёт отправлять в Issue 10
+        if (_sim is null)
+        {
+            if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
+                _hud.ShowMessage("Клиент пока не может строить");
+            return;
+        }
 
         if (@event is InputEventKey { Pressed: true, Echo: false } key)
         {
@@ -217,7 +396,7 @@ public partial class Main : Node2D
 
             // Игрок не меняет мир сам: он только отправляет команду. Решает Sim на ближайшем тике.
             var typeId = _world.Config.BuildingTypes[_selectedTypeIndex].Id;
-            _sim.Enqueue(new BuildCommand(_nextCommandId++, LocalPlayerId, typeId, cell));
+            _sim.Enqueue(new BuildCommand(_nextCommandId++, _localPlayerId, typeId, cell));
         }
     }
 

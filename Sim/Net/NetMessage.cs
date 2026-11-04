@@ -12,4 +12,5 @@ namespace CitUp.Sim;
 [JsonDerivedType(typeof(HeartbeatMessage), "heartbeat")]
 [JsonDerivedType(typeof(PingMessage), "ping")]
 [JsonDerivedType(typeof(PongMessage), "pong")]
+[JsonDerivedType(typeof(JoinRejectedMessage), "joinRejected")]
 public abstract record NetMessage;

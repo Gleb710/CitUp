@@ -15,8 +15,8 @@ public partial class NetManager : Node
 {
     public const int DefaultPort = 7777;
     private const int MaxClients = 4;
-    private const int HostPeerId = 1;
-
+    public const int HostPeerId = 1;
+    
     /// <summary>Пришло сообщение: id отправителя и разобранное сообщение.</summary>
     public event Action<int, NetMessage>? MessageReceived;
 
@@ -88,6 +88,15 @@ public partial class NetManager : Node
         Multiplayer.MultiplayerPeer = null;
         IsHost = false;
         IsClient = false;
+    }
+    
+    /// <summary>Хост: отключает пира (например, после отказа в подключении).</summary>
+    public void Kick(int peerId)
+    {
+        if (Multiplayer.MultiplayerPeer is null || !Multiplayer.GetPeers().Contains(peerId))
+            return;
+
+        Multiplayer.MultiplayerPeer.DisconnectPeer(peerId);
     }
 
     public void SendToHost(NetMessage message) => Send(HostPeerId, message);

@@ -105,6 +105,14 @@ public class SerializationTests
         Assert.Equal(555, AssertRoundTrips(new PingMessage(555)).ClientTimeMs);
         Assert.Equal(555, AssertRoundTrips(new PongMessage(555)).ClientTimeMs);
     }
+    
+    [Fact]
+    public void JoinRejected_RoundTrips()
+    {
+        var back = AssertRoundTrips(new JoinRejectedMessage("Версия игры не совпадает"));
+
+        Assert.Equal("Версия игры не совпадает", back.Reason);
+    }
 
     // ---------- плохие данные ----------
 

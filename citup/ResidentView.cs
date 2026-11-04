@@ -13,14 +13,14 @@ public partial class ResidentView : Node2D
     private static readonly Vector2 Lift = new(0f, -4f);   // чуть приподнимаем, чтобы «стоял» на клетке
 
     private World _world = null!;
-    private SimRunner _runner = null!;
+    private Func<double> _renderTick = null!;
     private bool _bound;
     private bool _showPaths;
 
-    public void Bind(World world, SimRunner runner)
+    public void Bind(World world, Func<double> renderTick)
     {
         _world = world;
-        _runner = runner;
+        _renderTick = renderTick;
         _bound = true;
     }
 
@@ -43,7 +43,7 @@ public partial class ResidentView : Node2D
         if (!_bound)
             return;
 
-        double renderTick = _runner.RenderTick;
+        double renderTick = _renderTick();
         int ticksPerCell = _world.Config.Resident.TicksPerCell;
 
         foreach (var resident in _world.Residents)
