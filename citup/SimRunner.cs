@@ -16,8 +16,24 @@ public partial class SimRunner : Node
     private bool _bound;
     private double _accumulator;
 
-    /// <summary>Срабатывает после каждого тика. Понадобится в Issue 5 для перерисовки.</summary>
+    /// <summary>Срабатывает после каждого тика. Используется для перерисовки и сообщений.</summary>
     public event Action<StepResult>? Stepped;
+
+    /// <summary>
+    /// Дробное время для плавной анимации: номер текущего тика плюс доля прошедшего до следующего.
+    /// Только для отрисовки, в логике симуляции не используется.
+    /// </summary>
+    public double RenderTick
+    {
+        get
+        {
+            if (!_bound)
+                return 0;
+
+            double tickLength = 1.0 / _sim.World.Config.TicksPerSecond;
+            return _sim.World.CurrentTick + Math.Clamp(_accumulator / tickLength, 0.0, 1.0);
+        }
+    }
 
     public void Bind(SimEngine sim)
     {

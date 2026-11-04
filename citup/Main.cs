@@ -32,6 +32,11 @@ public partial class Main : Node2D
         var runner = GetNode<SimRunner>("SimRunner");
         runner.Bind(_sim);
         runner.Stepped += OnStepped;
+        
+        // Слой жителей создаём из кода как дочерний узел WorldView: у него та же система координат
+        var residentView = new ResidentView();
+        _view.AddChild(residentView);
+        residentView.Bind(_world, runner);
 
         GetNode<Camera2D>("Camera2D").Position = IsoGrid.MapCenter(_world);
 
