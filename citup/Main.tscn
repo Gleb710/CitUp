@@ -1,0 +1,26 @@
+[gd_scene format=3 uid="uid://j1417pnw2483"]
+
+[ext_resource type="Script" uid="uid://b6wouo3cqflor" path="res://Main.cs" id="1_cm0pq"]
+[ext_resource type="Script" uid="uid://colptwr3kbc1a" path="res://WorldView.cs" id="2_fos0i"]
+[ext_resource type="Script" uid="uid://dwi1qwhbn6p8x" path="res://CameraController.cs" id="3_3dxm6"]
+[ext_resource type="Script" uid="uid://dqf3vr01o6x8x" path="res://SimRunner.cs" id="4_lgr22"]
+
+[node name="Main" type="Node2D" unique_id=1858005244]
+script = ExtResource("1_cm0pq")
+
+[node name="WorldView" type="Node2D" parent="." unique_id=1047433664]
+script = ExtResource("2_fos0i")
+
+[node name="Camera2D" type="Camera2D" parent="." unique_id=544677405]
+script = ExtResource("3_3dxm6")
+
+[node name="SimRunner" type="Node" parent="." unique_id=1277291788]
+script = ExtResource("4_lgr22")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=360549843]
+
+[node name="InfoLabel" type="Label" parent="CanvasLayer" unique_id=498348162]
+offset_right = 40.0
+offset_bottom = 23.0
+theme_override_font_sizes/font_size = 20
+metadata/_edit_use_anchors_ = true
