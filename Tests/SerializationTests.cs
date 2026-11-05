@@ -107,6 +107,12 @@ public class SerializationTests
     }
     
     [Fact]
+    public void ResyncRequest_RoundTrips()
+    {
+        AssertRoundTrips(new ResyncRequestMessage());
+    }
+    
+    [Fact]
     public void JoinRejected_RoundTrips()
     {
         var back = AssertRoundTrips(new JoinRejectedMessage("Версия игры не совпадает"));

@@ -149,6 +149,74 @@ public sealed class World
         }
     }
     
+        /// <summary>
+    /// Контрольное число состояния мира. От номера тика не зависит: зависит только от того, что меняют события.
+    /// Хост кладёт его в хартбит, клиент сравнивает со своим (обнаружение рассинхрона).
+    /// </summary>
+    public int StateHash()
+    {
+        uint hash = 2166136261;   // FNV-1a: простой быстрый хеш
+
+        hash = Mix(hash, NextBuildingId);
+        foreach (var building in _buildings)
+        {
+            hash = Mix(hash, building.Id);
+            hash = MixText(hash, building.Type);
+            hash = Mix(hash, building.Cell.X);
+            hash = Mix(hash, building.Cell.Y);
+            hash = Mix(hash, building.OwnerId);
+        }
+
+        foreach (var resident in _residents)
+        {
+            hash = Mix(hash, resident.Id);
+            hash = Mix(hash, resident.Cell.X);
+            hash = Mix(hash, resident.Cell.Y);
+
+            // Стартовый тик и путь учитываем только пока житель идёт: после финиша в объекте остаётся
+            // старое значение, а у подключившегося по снимку его нет
+            if (resident.Path is { Count: > 0 } path)
+            {
+                hash = Mix(hash, 1);
+                hash = Mix(hash, unchecked((int)resident.WalkStartTick));
+                hash = Mix(hash, unchecked((int)(resident.WalkStartTick >> 32)));
+                hash = Mix(hash, path.Count);
+                foreach (var cell in path)
+                {
+                    hash = Mix(hash, cell.X);
+                    hash = Mix(hash, cell.Y);
+                }
+            }
+            else
+            {
+                hash = Mix(hash, 0);
+            }
+        }
+
+        return unchecked((int)hash);
+    }
+
+    private static uint Mix(uint hash, int value)
+    {
+        unchecked
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                hash ^= (uint)((value >> (8 * i)) & 0xFF);
+                hash *= 16777619;
+            }
+        }
+        return hash;
+    }
+
+    private static uint MixText(uint hash, string text)
+    {
+        hash = Mix(hash, text.Length);
+        foreach (char c in text)
+            hash = Mix(hash, c);
+        return hash;
+    }
+    
     // internal: двигать время может только SimEngine из этой же сборки
     internal void AdvanceTick() => CurrentTick++;
 }

@@ -10,9 +10,12 @@ namespace CitUp.Game;
 /// <summary>Корень сцены. Показывает меню, запускает режим (одиночный, хост, клиент) и превращает ввод в команды.</summary>
 public partial class Main : Node2D
 {
-    private const double HeartbeatSeconds = 1.0;   // как часто хост шлёт хартбит
-    private const double PingSeconds = 2.0;        // как часто клиент замеряет задержку
-    private const int SyncLogTicks = 50;           // как часто (в тиках) пишем в журнал клетку жителя для сверки окон
+    private const double HeartbeatSeconds = 1.0;        // как часто хост шлёт хартбит
+    private const double PingSeconds = 2.0;             // как часто клиент замеряет задержку
+    private const double IndicatorSeconds = 0.5;        // как часто обновляется индикатор соединения
+    private const double ResyncCooldownSeconds = 5.0;   // клиент просит новый снимок не чаще, чем раз в столько секунд
+    private const ulong HostResyncCooldownMs = 2000;    // хост отдаёт новый снимок одному игроку не чаще, чем раз в столько мс
+    private const int SyncLogTicks = 50;                // как часто (в тиках) пишем в журнал клетку жителя для сверки окон
 
     private WorldView _view = null!;
     private SimRunner _runner = null!;
@@ -29,7 +32,8 @@ public partial class Main : Node2D
 
     // Только хост
     private PlayerRegistry? _players;
-    private readonly Dictionary<int, int> _playerByPeer = new();   // id соединения → id игрока
+    private readonly Dictionary<int, int> _playerByPeer = new();       // id соединения → id игрока
+    private readonly Dictionary<int, ulong> _lastResyncServed = new(); // когда пиру в последний раз отдавали новый снимок
     private int _hostPort;
     private string _hostAddresses = "";
     private double _heartbeatTimer;
@@ -40,16 +44,23 @@ public partial class Main : Node2D
     private int _nextCommandId = 1;   // нумерация команд этого клиента
     private double _pingTimer;
     private long _lastLoggedBucket;
+    private bool _resyncing;          // ждём новый снимок: события пока игнорируем
+    private int _resyncCount;
+    private double _lastResyncRequestSeconds = double.NegativeInfinity;
+    private bool _lastHashMatched = true;
 
+    private double _indicatorTimer;
     private int _localPlayerId = PlayerRegistry.HostPlayerId;
     private string _playerName = "Игрок";
-    private string _role = "меню";
     private int _selectedTypeIndex;
 
     public override void _Ready()
     {
         // У Godot _Ready() дочерних узлов вызывается раньше, чем у родителя:
         // к этому моменту все узлы из сцены уже существуют.
+        GameLog.InstallCrashHandlers();
+        Log($"запуск CitUp, версия протокола {NetProtocol.Version}");
+
         _view = GetNode<WorldView>("WorldView");
         _runner = GetNode<SimRunner>("SimRunner");
         _hud = GetNode<Hud>("CanvasLayer");
@@ -75,16 +86,21 @@ public partial class Main : Node2D
         _infoLabel.Text = "";
     }
 
+    public override void _ExitTree() => GameLog.Shutdown();
+
+    private static void Log(string text) => GameLog.Info(text);
+
     // ---------- запуск режимов ----------
 
     private void OnSoloPressed()
     {
-        _role = "одиночная";
+        GameLog.Start("solo");
         _localPlayerId = PlayerRegistry.HostPlayerId;
         StartWorld();
         _menu.CloseMenu();
         _hud.SetNetStatus("Одиночная игра");
         GetWindow().Title = "CitUp: одиночная";
+        Log("одиночная игра начата");
     }
 
     private void OnHostPressed(string playerName, int port)
@@ -96,14 +112,15 @@ public partial class Main : Node2D
             return;
         }
 
+        GameLog.Start("host");
         _playerName = PlayerRegistry.CleanName(playerName);
         _players = new PlayerRegistry();
         _players.RegisterHost(_playerName);
         _playerByPeer.Clear();
+        _lastResyncServed.Clear();
         _localPlayerId = PlayerRegistry.HostPlayerId;
         _hostPort = port;
         _hostAddresses = string.Join(", ", NetManager.LocalAddresses());
-        _role = "хост";
 
         StartWorld();
         _menu.CloseMenu();
@@ -121,8 +138,8 @@ public partial class Main : Node2D
             return;
         }
 
+        GameLog.Start("client");
         _playerName = PlayerRegistry.CleanName(playerName);
-        _role = "клиент";
         _menu.SetStatus($"Подключаюсь к {address}:{port}...");
         Log($"подключение к {address}:{port}");
     }
@@ -169,6 +186,7 @@ public partial class Main : Node2D
             return;
 
         _router?.Forget(peerId);
+        _lastResyncServed.Remove(peerId);
 
         if (_playerByPeer.Remove(peerId, out int playerId) && _players is not null)
         {
@@ -195,18 +213,18 @@ public partial class Main : Node2D
     private void OnConnectFailed()
     {
         _net.Shutdown();
-        _role = "меню";
         _menu.SetStatus("Не удалось подключиться. Проверьте адрес, порт и что хост уже запущен.");
-        Log("подключиться не удалось");
+        GameLog.Warn("подключиться не удалось");
     }
 
     private void OnHostLost()
     {
         _clock = null;   // часы встали, житель замер: мир больше не обновляется
         _connectionLost = true;
+        _resyncing = false;
         _hud.SetNetStatus("Связь с хостом потеряна");
         _hud.ShowMessage("Связь с хостом потеряна");
-        Log("связь с хостом потеряна");
+        GameLog.Warn("связь с хостом потеряна");
     }
 
     private void OnMessageReceived(int peerId, NetMessage message)
@@ -220,7 +238,7 @@ public partial class Main : Node2D
         else if (_net.IsClient && peerId == NetManager.HostPeerId)
             HandleClientMessage(message);
         else
-            Log($"сообщение от пира {peerId} проигнорировано: клиент принимает сообщения только от хоста");
+            GameLog.Warn($"сообщение от пира {peerId} проигнорировано: клиент принимает сообщения только от хоста");
     }
 
     // ---------- хост ----------
@@ -236,7 +254,7 @@ public partial class Main : Node2D
         // Пока пир не прошёл Hello, его сообщения не принимаются вообще
         if (!_playerByPeer.TryGetValue(peerId, out int playerId))
         {
-            Log($"сообщение {message.GetType().Name} от пира {peerId} проигнорировано: Hello не пройден");
+            GameLog.Warn($"сообщение {message.GetType().Name} от пира {peerId} проигнорировано: Hello не пройден");
             return;
         }
 
@@ -248,8 +266,11 @@ public partial class Main : Node2D
             case PingMessage ping:
                 _net.Send(peerId, new PongMessage(ping.ClientTimeMs));   // время клиента возвращаем без изменений
                 break;
+            case ResyncRequestMessage:
+                ServeResync(peerId, playerId);
+                break;
             default:
-                Log($"неожиданное сообщение {message.GetType().Name} от игрока {playerId}");
+                GameLog.Warn($"неожиданное сообщение {message.GetType().Name} от игрока {playerId}");
                 break;
         }
     }
@@ -261,7 +282,7 @@ public partial class Main : Node2D
 
         if (_playerByPeer.ContainsKey(peerId))
         {
-            Log($"повторный Hello от пира {peerId} проигнорирован");
+            GameLog.Warn($"повторный Hello от пира {peerId} проигнорирован");
             return;
         }
 
@@ -294,11 +315,29 @@ public partial class Main : Node2D
 
     private void Reject(int peerId, string reason)
     {
-        Log($"отказ пиру {peerId}: {reason}");
+        GameLog.Warn($"отказ пиру {peerId}: {reason}");
         _net.Send(peerId, new JoinRejectedMessage(reason));
 
         // Клиент уходит сам, получив отказ; если не ушёл, через секунду отключаем его принудительно
         GetTree().CreateTimer(1.0).Timeout += () => _net.Kick(peerId);
+    }
+
+    /// <summary>Клиент разошёлся с хостом и просит свежий снимок. Не чаще раза в 2 секунды на игрока.</summary>
+    private void ServeResync(int peerId, int playerId)
+    {
+        if (_world is null)
+            return;
+
+        ulong now = Time.GetTicksMsec();
+        if (_lastResyncServed.TryGetValue(peerId, out ulong last) && now - last < HostResyncCooldownMs)
+        {
+            GameLog.Warn($"игрок {playerId} просит новый снимок слишком часто, запрос проигнорирован");
+            return;
+        }
+
+        _lastResyncServed[peerId] = now;
+        GameLog.Warn($"игрок {playerId} запросил новый снимок мира (пересинхронизация)");
+        _net.Send(peerId, new WelcomeMessage(playerId, _world.ToSnapshot()));
     }
 
     /// <summary>Команда клиента. Игрок определяется по соединению, поле PlayerId из сообщения игнорируется.</summary>
@@ -310,7 +349,7 @@ public partial class Main : Node2D
         // Из сети может прийти что угодно, в том числе пустая команда
         if (incoming is null)
         {
-            Log($"пустая команда от игрока {playerId} проигнорирована");
+            GameLog.Warn($"пустая команда от игрока {playerId} проигнорирована");
             return;
         }
 
@@ -330,14 +369,13 @@ public partial class Main : Node2D
             _net.Send(peerId, message);
     }
 
-    /// <summary>Хост: хартбит с текущим тиком. По нему клиенты подстраивают свои часы.</summary>
+    /// <summary>Хост: хартбит с тиком (для часов клиента) и хешем состояния (для проверки рассинхрона).</summary>
     private void SendHeartbeat()
     {
         if (_world is null)
             return;
 
-        // Хеш состояния (третье число) появится в Issue 12, пока 0
-        var heartbeat = new HeartbeatMessage(_world.CurrentTick, _world.Buildings.Count, 0);
+        var heartbeat = new HeartbeatMessage(_world.CurrentTick, _world.Buildings.Count, _world.StateHash());
         foreach (int peerId in _playerByPeer.Keys)
             _net.Send(peerId, heartbeat);
     }
@@ -391,19 +429,23 @@ public partial class Main : Node2D
                 break;
             case HeartbeatMessage heartbeat:
                 _clock?.OnHeartbeat(heartbeat.HostTick);
+                CheckSync(heartbeat);
                 break;
             case PongMessage pong:
                 // Задержка туда и обратно: сколько прошло с отправки пинга, на который хост ответил
                 _clock?.OnPong(((long)Time.GetTicksMsec() - pong.ClientTimeMs) / 1000.0);
                 break;
             default:
-                Log($"неожиданное сообщение {message.GetType().Name}");
+                GameLog.Warn($"неожиданное сообщение {message.GetType().Name}");
                 break;
         }
     }
 
+    /// <summary>Приходит и при первом подключении, и при пересинхронизации (повторный снимок).</summary>
     private void OnWelcome(WelcomeMessage welcome)
     {
+        bool isResync = _resyncing;
+
         World world;
         try
         {
@@ -411,10 +453,11 @@ public partial class Main : Node2D
         }
         catch (InvalidDataException ex)
         {
-            Log($"испорченный снимок: {ex.Message}");
+            GameLog.Error($"испорченный снимок: {ex.Message}");
             _net.Shutdown();
-            _role = "меню";
+            _resyncing = false;
             _menu.SetStatus($"Хост прислал испорченный мир: {ex.Message}");
+            _hud.ShowMessage("Хост прислал испорченный мир");
             return;
         }
 
@@ -423,6 +466,8 @@ public partial class Main : Node2D
         _sim = null;      // у клиента нет движка: мир меняется только событиями хоста
         _router = null;
         _connectionLost = false;
+        _resyncing = false;
+        _lastHashMatched = true;
 
         var clock = new ClientClock(world.Config.TicksPerSecond, world.CurrentTick);
         _clock = clock;
@@ -432,7 +477,16 @@ public partial class Main : Node2D
         _menu.CloseMenu();
         _hud.SetNetStatus($"Клиент: вы игрок {_localPlayerId} ({_playerName})");
         GetWindow().Title = "CitUp: клиент";
-        Log($"мир получен: {world.Buildings.Count} зданий, тик {world.CurrentTick}, вы игрок {_localPlayerId}");
+
+        if (isResync)
+        {
+            _hud.ShowMessage("Мир синхронизирован заново");
+            Log($"мир синхронизирован заново: {world.Buildings.Count} зданий, тик {world.CurrentTick}");
+        }
+        else
+        {
+            Log($"мир получен: {world.Buildings.Count} зданий, тик {world.CurrentTick}, вы игрок {_localPlayerId}");
+        }
 
         // Первый замер пинга сразу, чтобы первый же хартбит синхронизировал часы с учётом задержки
         _pingTimer = 0;
@@ -441,16 +495,16 @@ public partial class Main : Node2D
 
     private void OnJoinRejected(JoinRejectedMessage rejected)
     {
-        Log($"хост отказал: {rejected.Reason}");
+        GameLog.Warn($"хост отказал: {rejected.Reason}");
         _net.Shutdown();
-        _role = "меню";
         _menu.SetStatus($"Хост отклонил подключение: {rejected.Reason}");
     }
 
     /// <summary>Клиент: применяет события хоста к своей копии мира в том же порядке, в каком они пришли.</summary>
     private void ApplyHostEvents(EventsMessage message)
     {
-        if (_world is null)
+        // Пока ждём новый снимок, события относятся к испорченному миру: пропускаем
+        if (_world is null || _resyncing)
             return;
 
         try
@@ -460,15 +514,52 @@ public partial class Main : Node2D
         }
         catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
         {
-            // Хост не должен присылать такие события: значит, миры разошлись. Автоматическое лечение добавим в Issue 12.
-            Log($"РАССИНХРОН при применении событий тика {message.Tick}: {ex.Message}");
-            _hud.ShowMessage("Рассинхрон миров. Переподключитесь к хосту.");
-            _hud.SetNetStatus("Рассинхрон: переподключитесь к хосту");
+            // Хост не должен присылать такие события: значит, миры разошлись
+            GameLog.Error($"РАССИНХРОН при применении событий тика {message.Tick}: {ex.Message}");
+            RequestResync("событие не удалось применить");
             return;
         }
 
         if (message.Events.Count > 0)
             _view.QueueRedraw();
+    }
+
+    /// <summary>Сравнивает хеш состояния из хартбита со своим. Расхождение означает рассинхрон.</summary>
+    private void CheckSync(HeartbeatMessage heartbeat)
+    {
+        if (_world is null || _resyncing || _connectionLost)
+            return;
+
+        int mine = _world.StateHash();
+        if (mine == heartbeat.StateHash && _world.Buildings.Count == heartbeat.BuildingCount)
+        {
+            _lastHashMatched = true;
+            return;
+        }
+
+        _lastHashMatched = false;
+        GameLog.Error(
+            $"РАССИНХРОН: у хоста зданий {heartbeat.BuildingCount}, хеш {heartbeat.StateHash:X8}; " +
+            $"у клиента зданий {_world.Buildings.Count}, хеш {mine:X8}");
+        RequestResync("хеш состояния не совпал с хостом");
+    }
+
+    /// <summary>Просит хоста прислать мир заново. Не чаще, чем раз в ResyncCooldownSeconds.</summary>
+    private void RequestResync(string reason)
+    {
+        double now = Time.GetTicksMsec() / 1000.0;
+        if (now - _lastResyncRequestSeconds < ResyncCooldownSeconds)
+        {
+            GameLog.Warn($"пересинхронизация ({reason}) отложена: прошло меньше {ResyncCooldownSeconds} с с прошлого запроса");
+            return;
+        }
+
+        _lastResyncRequestSeconds = now;
+        _resyncing = true;
+        _resyncCount++;
+        _hud.ShowMessage("Рассинхрон миров, запрашиваю мир заново...");
+        GameLog.Warn($"запрос нового снимка у хоста: {reason}");
+        _net.SendToHost(new ResyncRequestMessage());
     }
 
     private void SendPing() => _net.SendToHost(new PingMessage((long)Time.GetTicksMsec()));
@@ -489,12 +580,47 @@ public partial class Main : Node2D
         _lastLoggedBucket = bucket;
         long tick = bucket * SyncLogTicks;
         var cell = _world.Residents[0].CellAt(tick, _world.Config.Resident.TicksPerCell);
-        Log($"тик {tick}: житель в ({cell.X}, {cell.Y}), пинг {_clock.RttMs} мс, поправка часов {_clock.LastErrorTicks:F2} тика");
+        string hash = _lastHashMatched ? "ок" : "НЕ СОВПАЛ";
+        Log($"тик {tick}: житель в ({cell.X}, {cell.Y}), пинг {_clock.RttMs} мс, поправка часов {_clock.LastErrorTicks:F2} тика, хеш: {hash}");
+    }
+
+    // ---------- индикатор ----------
+
+    private void UpdateIndicator()
+    {
+        if (_net.IsHost && _players is not null)
+        {
+            _hud.SetConnection($"● Хост · игроков: {_players.ConnectedPlayers.Count}", Hud.LinkState.Good);
+        }
+        else if (_net.IsClient && _world is not null)
+        {
+            if (_connectionLost)
+            {
+                _hud.SetConnection("● Нет связи с хостом", Hud.LinkState.Bad);
+            }
+            else if (_resyncing)
+            {
+                _hud.SetConnection("● Синхронизация мира...", Hud.LinkState.Medium);
+            }
+            else if (_clock?.RttSeconds is null)
+            {
+                _hud.SetConnection("● Измеряю пинг...", Hud.LinkState.Medium);
+            }
+            else
+            {
+                int ms = _clock.RttMs;
+                var state = ms < 60 ? Hud.LinkState.Good : ms < 150 ? Hud.LinkState.Medium : Hud.LinkState.Bad;
+                string resync = _resyncCount > 0 ? $" · пересинхр.: {_resyncCount}" : "";
+                _hud.SetConnection($"● Пинг {ms} мс{resync}", state);
+            }
+        }
+        else
+        {
+            _hud.HideConnection();
+        }
     }
 
     // ---------- ввод и отображение ----------
-
-    private void Log(string text) => GD.Print($"[{_role}] {text}");
 
     public override void _Process(double delta)
     {
@@ -524,6 +650,13 @@ public partial class Main : Node2D
             LogClientSync();
         }
 
+        _indicatorTimer += delta;
+        if (_indicatorTimer >= IndicatorSeconds)
+        {
+            _indicatorTimer = 0;
+            UpdateIndicator();
+        }
+
         if (_world is null)
         {
             _infoLabel.Text = "";
@@ -537,6 +670,22 @@ public partial class Main : Node2D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        // Служебные клавиши работают всегда, даже в меню
+        if (@event is InputEventKey { Pressed: true, Echo: false } service)
+        {
+            if (service.Keycode == Key.F4)
+            {
+                GameLog.OpenFolder();
+                return;
+            }
+
+            if (service.Keycode == Key.F9)
+            {
+                DebugCorruptClientWorld();
+                return;
+            }
+        }
+
         // Пока мира нет (меню, клиент без снимка), играть не во что
         if (_world is null)
             return;
@@ -562,6 +711,35 @@ public partial class Main : Node2D
             var cell = IsoGrid.PointToCell(GetGlobalMousePosition());
             if (_world.IsInside(cell))
                 SubmitBuild(cell);
+        }
+    }
+
+    /// <summary>
+    /// Отладка (F9, только у клиента): добавляет в мир клиента здание, которого нет у хоста.
+    /// Так проверяется обнаружение рассинхрона. Позже это заменит консоль отладки (Фаза 2).
+    /// </summary>
+    private void DebugCorruptClientWorld()
+    {
+        if (_world is null || !_net.IsClient)
+        {
+            _hud.ShowMessage("F9 (порча мира для проверки) работает только у клиента");
+            return;
+        }
+
+        for (int y = 0; y < _world.Height; y++)
+        {
+            for (int x = 0; x < _world.Width; x++)
+            {
+                var cell = new Cell(x, y);
+                if (_world.BuildingAt(cell) is not null)
+                    continue;
+
+                _world.Apply(new BuildingBuilt(_world.NextBuildingId, "house", cell, 99));
+                _view.QueueRedraw();
+                _hud.ShowMessage("ОТЛАДКА: мир клиента испорчен");
+                GameLog.Warn($"ОТЛАДКА: в мир клиента искусственно добавлено здание в {cell}");
+                return;
+            }
         }
     }
 
@@ -617,6 +795,6 @@ public partial class Main : Node2D
             return;
 
         var cell = _world.Residents[0].CellAt(_world.CurrentTick, _world.Config.Resident.TicksPerCell);
-        Log($"тик {_world.CurrentTick}: житель в ({cell.X}, {cell.Y})");
+        Log($"тик {_world.CurrentTick}: житель в ({cell.X}, {cell.Y}), хеш {_world.StateHash():X8}");
     }
 }

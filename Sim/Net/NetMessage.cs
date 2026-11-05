@@ -13,4 +13,5 @@ namespace CitUp.Sim;
 [JsonDerivedType(typeof(PingMessage), "ping")]
 [JsonDerivedType(typeof(PongMessage), "pong")]
 [JsonDerivedType(typeof(JoinRejectedMessage), "joinRejected")]
+[JsonDerivedType(typeof(ResyncRequestMessage), "resyncRequest")]
 public abstract record NetMessage;
