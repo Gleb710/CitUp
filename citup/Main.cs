@@ -10,6 +10,10 @@ namespace CitUp.Game;
 /// <summary>Корень сцены. Показывает меню, запускает режим (одиночный, хост, клиент) и превращает ввод в команды.</summary>
 public partial class Main : Node2D
 {
+    private const double HeartbeatSeconds = 1.0;   // как часто хост шлёт хартбит
+    private const double PingSeconds = 2.0;        // как часто клиент замеряет задержку
+    private const int SyncLogTicks = 50;           // как часто (в тиках) пишем в журнал клетку жителя для сверки окон
+
     private WorldView _view = null!;
     private SimRunner _runner = null!;
     private Hud _hud = null!;
@@ -28,11 +32,14 @@ public partial class Main : Node2D
     private readonly Dictionary<int, int> _playerByPeer = new();   // id соединения → id игрока
     private int _hostPort;
     private string _hostAddresses = "";
+    private double _heartbeatTimer;
 
     // Только клиент
     private ClientClock? _clock;
     private bool _connectionLost;
     private int _nextCommandId = 1;   // нумерация команд этого клиента
+    private double _pingTimer;
+    private long _lastLoggedBucket;
 
     private int _localPlayerId = PlayerRegistry.HostPlayerId;
     private string _playerName = "Игрок";
@@ -204,8 +211,8 @@ public partial class Main : Node2D
 
     private void OnMessageReceived(int peerId, NetMessage message)
     {
-        // Рассылку событий не пишем в журнал: она идёт постоянно
-        if (message is not EventsMessage)
+        // Частые служебные сообщения в журнал не пишем: события, хартбиты, пинги
+        if (message is not (EventsMessage or HeartbeatMessage or PingMessage or PongMessage))
             Log($"сообщение {message.GetType().Name} от пира {peerId}");
 
         if (_net.IsHost)
@@ -237,6 +244,9 @@ public partial class Main : Node2D
         {
             case CommandMessage command:
                 HandleCommand(peerId, playerId, command.Command);
+                break;
+            case PingMessage ping:
+                _net.Send(peerId, new PongMessage(ping.ClientTimeMs));   // время клиента возвращаем без изменений
                 break;
             default:
                 Log($"неожиданное сообщение {message.GetType().Name} от игрока {playerId}");
@@ -320,6 +330,18 @@ public partial class Main : Node2D
             _net.Send(peerId, message);
     }
 
+    /// <summary>Хост: хартбит с текущим тиком. По нему клиенты подстраивают свои часы.</summary>
+    private void SendHeartbeat()
+    {
+        if (_world is null)
+            return;
+
+        // Хеш состояния (третье число) появится в Issue 12, пока 0
+        var heartbeat = new HeartbeatMessage(_world.CurrentTick, _world.Buildings.Count, 0);
+        foreach (int peerId in _playerByPeer.Keys)
+            _net.Send(peerId, heartbeat);
+    }
+
     /// <summary>Отправляет автору команды итог: локальному игроку показывает в HUD, клиенту шлёт отказ по сети.</summary>
     private void RouteResult(CommandResult result)
     {
@@ -367,6 +389,13 @@ public partial class Main : Node2D
             case CommandRejectedMessage rejected:
                 _hud.ShowMessage(new CommandResult(rejected.CommandId, rejected.Error).Message);
                 break;
+            case HeartbeatMessage heartbeat:
+                _clock?.OnHeartbeat(heartbeat.HostTick);
+                break;
+            case PongMessage pong:
+                // Задержка туда и обратно: сколько прошло с отправки пинга, на который хост ответил
+                _clock?.OnPong(((long)Time.GetTicksMsec() - pong.ClientTimeMs) / 1000.0);
+                break;
             default:
                 Log($"неожиданное сообщение {message.GetType().Name}");
                 break;
@@ -397,12 +426,17 @@ public partial class Main : Node2D
 
         var clock = new ClientClock(world.Config.TicksPerSecond, world.CurrentTick);
         _clock = clock;
+        _lastLoggedBucket = (long)clock.RenderTick / SyncLogTicks;
 
         ShowWorld(world, () => clock.RenderTick);
         _menu.CloseMenu();
         _hud.SetNetStatus($"Клиент: вы игрок {_localPlayerId} ({_playerName})");
         GetWindow().Title = "CitUp: клиент";
         Log($"мир получен: {world.Buildings.Count} зданий, тик {world.CurrentTick}, вы игрок {_localPlayerId}");
+
+        // Первый замер пинга сразу, чтобы первый же хартбит синхронизировал часы с учётом задержки
+        _pingTimer = 0;
+        SendPing();
     }
 
     private void OnJoinRejected(JoinRejectedMessage rejected)
@@ -437,6 +471,27 @@ public partial class Main : Node2D
             _view.QueueRedraw();
     }
 
+    private void SendPing() => _net.SendToHost(new PingMessage((long)Time.GetTicksMsec()));
+
+    /// <summary>
+    /// Клиент: когда его часы пересекают тик, кратный SyncLogTicks, пишет в журнал клетку жителя на этом тике.
+    /// У хоста такие же строки для тех же тиков, поэтому окна можно сверять по журналу.
+    /// </summary>
+    private void LogClientSync()
+    {
+        if (_clock is null || _world is null || _world.Residents.Count == 0)
+            return;
+
+        long bucket = (long)_clock.RenderTick / SyncLogTicks;
+        if (bucket <= _lastLoggedBucket)
+            return;
+
+        _lastLoggedBucket = bucket;
+        long tick = bucket * SyncLogTicks;
+        var cell = _world.Residents[0].CellAt(tick, _world.Config.Resident.TicksPerCell);
+        Log($"тик {tick}: житель в ({cell.X}, {cell.Y}), пинг {_clock.RttMs} мс, поправка часов {_clock.LastErrorTicks:F2} тика");
+    }
+
     // ---------- ввод и отображение ----------
 
     private void Log(string text) => GD.Print($"[{_role}] {text}");
@@ -444,6 +499,30 @@ public partial class Main : Node2D
     public override void _Process(double delta)
     {
         _clock?.Advance(delta);
+
+        // Хост: раз в секунду хартбит всем подключённым
+        if (_net.IsHost && _playerByPeer.Count > 0)
+        {
+            _heartbeatTimer += delta;
+            if (_heartbeatTimer >= HeartbeatSeconds)
+            {
+                _heartbeatTimer = 0;
+                SendHeartbeat();
+            }
+        }
+
+        // Клиент: раз в 2 секунды замер задержки и запись в журнал для сверки
+        if (_clock is not null && !_connectionLost)
+        {
+            _pingTimer += delta;
+            if (_pingTimer >= PingSeconds)
+            {
+                _pingTimer = 0;
+                SendPing();
+            }
+
+            LogClientSync();
+        }
 
         if (_world is null)
         {
@@ -522,9 +601,22 @@ public partial class Main : Node2D
             _view.QueueRedraw();
 
         if (_net.IsHost)
+        {
             BroadcastEvents(result.Events);
+            LogHostSync();
+        }
 
         foreach (var commandResult in result.Results)
             RouteResult(commandResult);
+    }
+
+    /// <summary>Хост: на каждом тике, кратном SyncLogTicks, пишет клетку жителя. Строки сверяются с журналом клиента.</summary>
+    private void LogHostSync()
+    {
+        if (_world is null || _world.Residents.Count == 0 || _world.CurrentTick % SyncLogTicks != 0)
+            return;
+
+        var cell = _world.Residents[0].CellAt(_world.CurrentTick, _world.Config.Resident.TicksPerCell);
+        Log($"тик {_world.CurrentTick}: житель в ({cell.X}, {cell.Y})");
     }
 }
