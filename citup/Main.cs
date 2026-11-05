@@ -15,7 +15,10 @@ public partial class Main : Node2D
     private const double IndicatorSeconds = 0.5;        // как часто обновляется индикатор соединения
     private const double ResyncCooldownSeconds = 5.0;   // клиент просит новый снимок не чаще, чем раз в столько секунд
     private const ulong HostResyncCooldownMs = 2000;    // хост отдаёт новый снимок одному игроку не чаще, чем раз в столько мс
+    private const long SilenceTimeoutMs = 6000;         // столько молчания от второй стороны считаем обрывом связи
     private const int SyncLogTicks = 50;                // как часто (в тиках) пишем в журнал клетку жителя для сверки окон
+
+    private enum Mode { Menu, Solo, Host, Client }
 
     private WorldView _view = null!;
     private SimRunner _runner = null!;
@@ -23,12 +26,18 @@ public partial class Main : Node2D
     private Label _infoLabel = null!;
     private NetManager _net = null!;
     private MenuPanel _menu = null!;
+    private ConnectionOverlay _overlay = null!;
     private ResidentView? _residentView;
+
+    private Mode _mode = Mode.Menu;
 
     // Одиночная игра и хост: есть World, SimEngine и учёт команд. Клиент: только World по снимку.
     private World? _world;
     private SimEngine? _sim;
     private CommandRouter? _router;
+
+    // Сторож связи: у хоста следит за клиентами (id пира), у клиента за хостом (id = HostPeerId)
+    private readonly LivenessTracker _liveness = new();
 
     // Только хост
     private PlayerRegistry? _players;
@@ -41,6 +50,9 @@ public partial class Main : Node2D
     // Только клиент
     private ClientClock? _clock;
     private bool _connectionLost;
+    private bool _reconnecting;       // идёт попытка вернуться в партию: показываем оверлей вместо меню
+    private string _lastAddress = "127.0.0.1";
+    private int _lastPort = NetManager.DefaultPort;
     private int _nextCommandId = 1;   // нумерация команд этого клиента
     private double _pingTimer;
     private long _lastLoggedBucket;
@@ -76,25 +88,38 @@ public partial class Main : Node2D
         _net.HostLost += OnHostLost;
         _net.MessageReceived += OnMessageReceived;
 
-        // Меню создаётся из кода и лежит поверх всего
+        // Меню и оверлей создаются из кода и лежат поверх всего
         _menu = new MenuPanel();
         AddChild(_menu);
         _menu.SoloPressed += OnSoloPressed;
         _menu.HostPressed += OnHostPressed;
         _menu.JoinPressed += OnJoinPressed;
 
+        _overlay = new ConnectionOverlay();
+        AddChild(_overlay);
+        _overlay.ReconnectPressed += OnReconnectPressed;
+        _overlay.MenuPressed += () => ReturnToMenu("");
+
         _infoLabel.Text = "";
     }
 
-    public override void _ExitTree() => GameLog.Shutdown();
+    public override void _ExitTree()
+    {
+        _net.Shutdown();   // корректно закрываем соединение, чтобы другая сторона заметила уход сразу
+        GameLog.Shutdown();
+    }
 
     private static void Log(string text) => GameLog.Info(text);
+
+    private static long NowMs() => (long)Time.GetTicksMsec();
 
     // ---------- запуск режимов ----------
 
     private void OnSoloPressed()
     {
         GameLog.Start("solo");
+        _mode = Mode.Solo;
+        _liveness.Clear();
         _localPlayerId = PlayerRegistry.HostPlayerId;
         StartWorld();
         _menu.CloseMenu();
@@ -113,6 +138,8 @@ public partial class Main : Node2D
         }
 
         GameLog.Start("host");
+        _mode = Mode.Host;
+        _liveness.Clear();
         _playerName = PlayerRegistry.CleanName(playerName);
         _players = new PlayerRegistry();
         _players.RegisterHost(_playerName);
@@ -139,6 +166,10 @@ public partial class Main : Node2D
         }
 
         GameLog.Start("client");
+        _mode = Mode.Client;
+        _liveness.Clear();
+        _lastAddress = address;
+        _lastPort = port;
         _playerName = PlayerRegistry.CleanName(playerName);
         _menu.SetStatus($"Подключаюсь к {address}:{port}...");
         Log($"подключение к {address}:{port}");
@@ -157,7 +188,7 @@ public partial class Main : Node2D
     }
 
     /// <summary>Показывает мир на экране: общая часть для одиночной игры, хоста и клиента.</summary>
-    private void ShowWorld(World world, Func<double> renderTick)
+    private void ShowWorld(World world, Func<double> renderTick, bool recenterCamera = true)
     {
         _view.Bind(world);
 
@@ -168,23 +199,66 @@ public partial class Main : Node2D
         _view.AddChild(_residentView);
         _residentView.Bind(world, renderTick);
 
-        GetNode<Camera2D>("Camera2D").Position = IsoGrid.MapCenter(world);
+        if (recenterCamera)
+            GetNode<Camera2D>("Camera2D").Position = IsoGrid.MapCenter(world);
+
         _hud.ShowSelection(world.Config, _selectedTypeIndex);
+    }
+
+    /// <summary>Выход в стартовое меню: закрываем соединение и убираем весь мир.</summary>
+    private void ReturnToMenu(string status)
+    {
+        _overlay.Close();
+        _net.Shutdown();
+
+        _mode = Mode.Menu;
+        _world = null;
+        _sim = null;
+        _router = null;
+        _clock = null;
+        _players = null;
+        _playerByPeer.Clear();
+        _lastResyncServed.Clear();
+        _liveness.Clear();
+        _connectionLost = false;
+        _resyncing = false;
+        _reconnecting = false;
+        _resyncCount = 0;
+
+        _residentView?.QueueFree();
+        _residentView = null;
+        _view.Unbind();
+
+        _hud.HideConnection();
+        _hud.ClearTexts();
+        _infoLabel.Text = "";
+        GetWindow().Title = "CitUp";
+
+        _menu.OpenMenu(status);
+        Log("возврат в меню");
     }
 
     // ---------- события сети ----------
 
     private void OnPeerJoined(int peerId)
     {
-        if (_net.IsHost)
-            Log($"пир {peerId} подключился, жду Hello");
+        if (_mode != Mode.Host)
+            return;
+
+        _liveness.Touch(peerId, NowMs());   // если пир подключился и замолчал, сторож его отключит
+        Log($"пир {peerId} подключился, жду Hello");
     }
 
     private void OnPeerLeft(int peerId)
     {
-        if (!_net.IsHost)
-            return;
+        if (_mode == Mode.Host)
+            RemovePeer(peerId, "соединение закрыто");
+    }
 
+    /// <summary>Хост: убирает пира из учёта. Мир и имя игрока остаются, чтобы он мог вернуться с тем же PlayerId.</summary>
+    private void RemovePeer(int peerId, string why)
+    {
+        _liveness.Remove(peerId);
         _router?.Forget(peerId);
         _lastResyncServed.Remove(peerId);
 
@@ -194,37 +268,99 @@ public partial class Main : Node2D
             _players.Disconnect(playerId);
             _hud.ShowMessage($"{name} отключился");
             RefreshHostStatus();
-            Log($"игрок {playerId} ({name}) отключился");
+            Log($"игрок {playerId} ({name}) отключился: {why}");
         }
         else
         {
-            Log($"пир {peerId} ушёл, не пройдя Hello");
+            Log($"пир {peerId} ушёл ({why}); Hello не пройден или игрок уже убран");
+        }
+    }
+
+    /// <summary>Хост: отключает пиров, от которых давно нет сообщений (убитый процесс, пропавшая сеть).</summary>
+    private void KickSilentPeers()
+    {
+        foreach (int peerId in _liveness.FindSilent(NowMs(), SilenceTimeoutMs))
+        {
+            GameLog.Warn($"пир {peerId} молчит больше {SilenceTimeoutMs / 1000} с, отключаю");
+            _net.Kick(peerId);
+            RemovePeer(peerId, "нет сообщений");
         }
     }
 
     private void OnConnectedToHost()
     {
-        _menu.SetStatus("Соединение установлено, жду мир...");
-        Log("соединение установлено, отправляю Hello");
+        if (_reconnecting)
+            _overlay.ShowBusy("Соединение установлено, жду мир...");
+        else
+            _menu.SetStatus("Соединение установлено, жду мир...");
 
+        Log("соединение установлено, отправляю Hello");
         _net.SendToHost(new HelloMessage(NetProtocol.Version, _playerName));
     }
 
     private void OnConnectFailed()
     {
-        _net.Shutdown();
-        _menu.SetStatus("Не удалось подключиться. Проверьте адрес, порт и что хост уже запущен.");
         GameLog.Warn("подключиться не удалось");
+        ClientFailed(
+            "Не удалось подключиться. Проверьте адрес, порт и что хост запущен.",
+            "Если хост перезапускали, он начал новую партию.");
     }
 
-    private void OnHostLost()
+    private void OnHostLost() => HandleConnectionLost("Хост закрыл игру или связь прервалась.");
+
+    /// <summary>Клиент: связь с хостом потеряна (транспорт сообщил или сработал сторож).</summary>
+    private void HandleConnectionLost(string reason)
     {
-        _clock = null;   // часы встали, житель замер: мир больше не обновляется
-        _connectionLost = true;
+        if (_mode != Mode.Client || _connectionLost)
+            return;
+
+        GameLog.Warn($"связь с хостом потеряна: {reason}");
+        ClientFailed(reason, "Мир на экране остановлен. Можно подключиться снова или вернуться в меню.");
+    }
+
+    /// <summary>
+    /// Клиент не смог войти или продолжить игру. Если игра уже шла (есть мир), показываем оверлей
+    /// с кнопками; если это была первая попытка, возвращаемся к меню с сообщением.
+    /// </summary>
+    private void ClientFailed(string text, string sessionHint = "")
+    {
+        _net.Shutdown();
+        _liveness.Clear();
+        _reconnecting = false;
         _resyncing = false;
-        _hud.SetNetStatus("Связь с хостом потеряна");
-        _hud.ShowMessage("Связь с хостом потеряна");
-        GameLog.Warn("связь с хостом потеряна");
+
+        bool inSession = _world is not null && _mode == Mode.Client;
+        if (inSession)
+        {
+            _connectionLost = true;
+            _clock = null;   // часы встали, житель замер: мир больше не обновляется
+            _hud.SetNetStatus("Связь с хостом потеряна");
+            _overlay.ShowLost(sessionHint.Length > 0 ? $"{text}\n{sessionHint}" : text);
+        }
+        else
+        {
+            _mode = Mode.Menu;
+            _menu.SetStatus(text);
+        }
+    }
+
+    /// <summary>Кнопка «Переподключиться»: тот же адрес, то же имя. Мир придёт заново снимком.</summary>
+    private void OnReconnectPressed()
+    {
+        if (_mode != Mode.Client)
+            return;
+
+        var error = _net.StartClient(_lastAddress, _lastPort);
+        if (error != Error.Ok)
+        {
+            _overlay.ShowLost($"Не удалось начать подключение: {error}");
+            return;
+        }
+
+        _reconnecting = true;
+        _liveness.Clear();
+        _overlay.ShowBusy($"Подключаюсь к {_lastAddress}:{_lastPort}...");
+        Log($"переподключение к {_lastAddress}:{_lastPort}");
     }
 
     private void OnMessageReceived(int peerId, NetMessage message)
@@ -233,12 +369,20 @@ public partial class Main : Node2D
         if (message is not (EventsMessage or HeartbeatMessage or PingMessage or PongMessage))
             Log($"сообщение {message.GetType().Name} от пира {peerId}");
 
-        if (_net.IsHost)
+        if (_mode == Mode.Host)
+        {
+            _liveness.Touch(peerId, NowMs());
             HandleHostMessage(peerId, message);
-        else if (_net.IsClient && peerId == NetManager.HostPeerId)
+        }
+        else if (_mode == Mode.Client && peerId == NetManager.HostPeerId)
+        {
+            _liveness.Touch(peerId, NowMs());
             HandleClientMessage(message);
+        }
         else
+        {
             GameLog.Warn($"сообщение от пира {peerId} проигнорировано: клиент принимает сообщения только от хоста");
+        }
     }
 
     // ---------- хост ----------
@@ -433,7 +577,7 @@ public partial class Main : Node2D
                 break;
             case PongMessage pong:
                 // Задержка туда и обратно: сколько прошло с отправки пинга, на который хост ответил
-                _clock?.OnPong(((long)Time.GetTicksMsec() - pong.ClientTimeMs) / 1000.0);
+                _clock?.OnPong((NowMs() - pong.ClientTimeMs) / 1000.0);
                 break;
             default:
                 GameLog.Warn($"неожиданное сообщение {message.GetType().Name}");
@@ -441,10 +585,11 @@ public partial class Main : Node2D
         }
     }
 
-    /// <summary>Приходит и при первом подключении, и при пересинхронизации (повторный снимок).</summary>
+    /// <summary>Приходит при первом подключении, при переподключении и при пересинхронизации.</summary>
     private void OnWelcome(WelcomeMessage welcome)
     {
         bool isResync = _resyncing;
+        bool wasReconnect = _reconnecting;
 
         World world;
         try
@@ -454,10 +599,7 @@ public partial class Main : Node2D
         catch (InvalidDataException ex)
         {
             GameLog.Error($"испорченный снимок: {ex.Message}");
-            _net.Shutdown();
-            _resyncing = false;
-            _menu.SetStatus($"Хост прислал испорченный мир: {ex.Message}");
-            _hud.ShowMessage("Хост прислал испорченный мир");
+            ClientFailed($"Хост прислал испорченный мир: {ex.Message}");
             return;
         }
 
@@ -467,18 +609,27 @@ public partial class Main : Node2D
         _router = null;
         _connectionLost = false;
         _resyncing = false;
+        _reconnecting = false;
         _lastHashMatched = true;
+        _overlay.Close();
+        _liveness.Touch(NetManager.HostPeerId, NowMs());
 
         var clock = new ClientClock(world.Config.TicksPerSecond, world.CurrentTick);
         _clock = clock;
         _lastLoggedBucket = (long)clock.RenderTick / SyncLogTicks;
 
-        ShowWorld(world, () => clock.RenderTick);
+        // При повторном снимке камеру не трогаем, чтобы не сбивать игрока
+        ShowWorld(world, () => clock.RenderTick, recenterCamera: !(isResync || wasReconnect));
         _menu.CloseMenu();
         _hud.SetNetStatus($"Клиент: вы игрок {_localPlayerId} ({_playerName})");
         GetWindow().Title = "CitUp: клиент";
 
-        if (isResync)
+        if (wasReconnect)
+        {
+            _hud.ShowMessage("Переподключение выполнено");
+            Log($"переподключение выполнено: {world.Buildings.Count} зданий, тик {world.CurrentTick}, вы игрок {_localPlayerId}");
+        }
+        else if (isResync)
         {
             _hud.ShowMessage("Мир синхронизирован заново");
             Log($"мир синхронизирован заново: {world.Buildings.Count} зданий, тик {world.CurrentTick}");
@@ -496,8 +647,9 @@ public partial class Main : Node2D
     private void OnJoinRejected(JoinRejectedMessage rejected)
     {
         GameLog.Warn($"хост отказал: {rejected.Reason}");
-        _net.Shutdown();
-        _menu.SetStatus($"Хост отклонил подключение: {rejected.Reason}");
+        ClientFailed(
+            $"Хост отклонил подключение: {rejected.Reason}",
+            "Если хост ещё считает вас подключённым, подождите несколько секунд и нажмите «Переподключиться».");
     }
 
     /// <summary>Клиент: применяет события хоста к своей копии мира в том же порядке, в каком они пришли.</summary>
@@ -562,7 +714,14 @@ public partial class Main : Node2D
         _net.SendToHost(new ResyncRequestMessage());
     }
 
-    private void SendPing() => _net.SendToHost(new PingMessage((long)Time.GetTicksMsec()));
+    private void SendPing() => _net.SendToHost(new PingMessage(NowMs()));
+
+    /// <summary>Клиент: если от хоста слишком долго нет вестей, считаем связь потерянной.</summary>
+    private void CheckHostSilence()
+    {
+        if (_liveness.SilenceMs(NetManager.HostPeerId, NowMs()) is long silence && silence > SilenceTimeoutMs)
+            HandleConnectionLost($"Хост не отвечает уже {silence / 1000} с.");
+    }
 
     /// <summary>
     /// Клиент: когда его часы пересекают тик, кратный SyncLogTicks, пишет в журнал клетку жителя на этом тике.
@@ -588,13 +747,17 @@ public partial class Main : Node2D
 
     private void UpdateIndicator()
     {
-        if (_net.IsHost && _players is not null)
+        if (_mode == Mode.Host && _players is not null)
         {
             _hud.SetConnection($"● Хост · игроков: {_players.ConnectedPlayers.Count}", Hud.LinkState.Good);
         }
-        else if (_net.IsClient && _world is not null)
+        else if (_mode == Mode.Client && _world is not null)
         {
-            if (_connectionLost)
+            if (_reconnecting)
+            {
+                _hud.SetConnection("● Переподключение...", Hud.LinkState.Medium);
+            }
+            else if (_connectionLost)
             {
                 _hud.SetConnection("● Нет связи с хостом", Hud.LinkState.Bad);
             }
@@ -626,19 +789,21 @@ public partial class Main : Node2D
     {
         _clock?.Advance(delta);
 
-        // Хост: раз в секунду хартбит всем подключённым
-        if (_net.IsHost && _playerByPeer.Count > 0)
+        // Хост: раз в секунду хартбит всем подключённым и проверка, не замолчал ли кто-нибудь
+        if (_mode == Mode.Host)
         {
             _heartbeatTimer += delta;
             if (_heartbeatTimer >= HeartbeatSeconds)
             {
                 _heartbeatTimer = 0;
-                SendHeartbeat();
+                if (_playerByPeer.Count > 0)
+                    SendHeartbeat();
+                KickSilentPeers();
             }
         }
 
-        // Клиент: раз в 2 секунды замер задержки и запись в журнал для сверки
-        if (_clock is not null && !_connectionLost)
+        // Клиент: раз в 2 секунды замер задержки, запись в журнал для сверки и проверка, жив ли хост
+        if (_mode == Mode.Client && _clock is not null && !_connectionLost)
         {
             _pingTimer += delta;
             if (_pingTimer >= PingSeconds)
@@ -648,6 +813,7 @@ public partial class Main : Node2D
             }
 
             LogClientSync();
+            CheckHostSilence();   // последним: при обрыве он обнуляет часы
         }
 
         _indicatorTimer += delta;
@@ -720,9 +886,9 @@ public partial class Main : Node2D
     /// </summary>
     private void DebugCorruptClientWorld()
     {
-        if (_world is null || !_net.IsClient)
+        if (_world is null || _mode != Mode.Client || _connectionLost)
         {
-            _hud.ShowMessage("F9 (порча мира для проверки) работает только у клиента");
+            _hud.ShowMessage("F9 (порча мира для проверки) работает только у подключённого клиента");
             return;
         }
 
@@ -751,7 +917,7 @@ public partial class Main : Node2D
     {
         var typeId = _world!.Config.BuildingTypes[_selectedTypeIndex].Id;
 
-        if (_net.IsClient)
+        if (_mode == Mode.Client)
         {
             if (_connectionLost)
             {
@@ -778,7 +944,7 @@ public partial class Main : Node2D
         if (result.Events.Count > 0)
             _view.QueueRedraw();
 
-        if (_net.IsHost)
+        if (_mode == Mode.Host)
         {
             BroadcastEvents(result.Events);
             LogHostSync();

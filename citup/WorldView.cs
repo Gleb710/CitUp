@@ -37,6 +37,15 @@ public partial class WorldView : Node2D
         _bound = true;
         QueueRedraw();
     }
+    
+    /// <summary>Отвязывает мир: слой перестаёт рисовать карту (выход в меню).</summary>
+    public void Unbind()
+    {
+        _bound = false;
+        HoverCell = null;
+        _typeColors.Clear();
+        QueueRedraw();
+    }
 
     public override void _Process(double delta)
     {

@@ -93,6 +93,15 @@ public partial class Hud : CanvasLayer
 
     public void HideConnection() => _indicator.Visible = false;
 
+    /// <summary>Очищает подсказку, сообщения и статус (выход в меню).</summary>
+    public void ClearTexts()
+    {
+        _hint.Text = "";
+        _message.Text = "";
+        _status.Text = "";
+        _messageLeft = 0;
+    }
+    
     public override void _Process(double delta)
     {
         if (_indicator.Visible)

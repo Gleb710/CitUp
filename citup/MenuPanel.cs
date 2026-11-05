@@ -72,6 +72,13 @@ public partial class MenuPanel : CanvasLayer
 
     public void CloseMenu() => Visible = false;
 
+    /// <summary>Снова показывает меню (например, после выхода из партии). Текст статуса можно передать сразу.</summary>
+    public void OpenMenu(string status = "")
+    {
+        SetStatus(status);
+        Visible = true;
+    }
+    
     private static LineEdit AddField(Container parent, string caption, string text)
     {
         parent.AddChild(new Label { Text = caption });
