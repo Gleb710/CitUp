@@ -43,6 +43,16 @@ jobs:
           echo "Mono templates:"
           ls -la "$HOME/.local/share/godot/export_templates/4.7.2.stable.mono"
 
+      - name: Install .NET 8 Runtime
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+          bash /tmp/dotnet-install.sh \
+            --channel 8.0 \
+            --runtime dotnet \
+            --install-dir /usr/share/dotnet
+
+          dotnet --list-runtimes
+
       - name: Run tests
         run: dotnet test Tests/Tests.csproj --configuration Release
 
