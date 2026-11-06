@@ -1,0 +1,68 @@
+
+name: Build and Release CitUp
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+  # Позволяет проверить сборку вручную,
+  # не создавая настоящий релиз и тег.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: ubuntu-24.04
+
+    container:
+      image: barichello/godot-ci:mono-4.7.2
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Prepare Godot
+        run: |
+          mkdir -p "$HOME/.local/share/godot/export_templates"
+          mkdir -p "$HOME/.config"
+
+          if [ "$HOME" != "/root" ]; then
+            cp -a /root/.config/godot "$HOME/.config/"
+            cp -a /root/.local/share/godot/export_templates/4.7.2.stable \
+              "$HOME/.local/share/godot/export_templates/"
+          fi
+
+      - name: Run tests
+        run: dotnet test citup/citup.sln --configuration Release
+
+      - name: Export Windows build
+        run: |
+          mkdir -p build/CitUp
+
+          godot --headless --path citup \
+            --export-release "Windows Desktop" \
+            "$GITHUB_WORKSPACE/build/CitUp/CitUp.exe"
+
+      - name: Create archive
+        run: |
+          cd build
+          zip -r "CitUp-${GITHUB_REF_NAME}-windows-x86_64.zip" CitUp
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CitUp-${{ github.ref_name }}-windows-x86_64
+          path: build/CitUp-${{ github.ref_name }}-windows-x86_64.zip
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: build/CitUp-${{ github.ref_name }}-windows-x86_64.zip
