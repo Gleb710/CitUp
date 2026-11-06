@@ -44,7 +44,7 @@ jobs:
           ls -la "$HOME/.local/share/godot/export_templates/4.7.2.stable.mono"
 
       - name: Run tests
-        run: dotnet test citup/citup.sln --configuration Release
+        run: dotnet test citup/Citup.sln --configuration Release
 
       - name: Export Windows build
         run: |
