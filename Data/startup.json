@@ -1,0 +1,14 @@
+{
+  "startingMoney": 1000,
+  "startingResources": [
+    {
+      "resourceId": "wood",
+      "amount": 50
+    }
+  ],
+  "freeBuildingIds": [
+    "townhall",
+    "house",
+    "well"
+  ]
+}
