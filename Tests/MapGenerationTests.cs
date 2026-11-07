@@ -103,4 +103,151 @@ public class MapGenerationTests
             Assert.InRange(value, 0.0, 1.0);
         }
     }
+    
+    private static MapGenerationOptions CreateOptions(
+    ulong seed,
+    int width = 20,
+    int height = 15) =>
+    new(
+        width,
+        height,
+        seed,
+        LakeCount: 3,
+        MinLakeSize: 8,
+        MaxLakeSize: 20);
+
+    [Fact]
+    public void Generate_ReturnsGridWithConfiguredSize()
+    {
+        var options = CreateOptions(42);
+
+        var grid = MapGenerator.Generate(options);
+
+        Assert.Equal(options.Width, grid.Width);
+        Assert.Equal(options.Height, grid.Height);
+    }
+
+    [Fact]
+    public void Generate_SameSeed_GivesSameMap()
+    {
+        var options = CreateOptions(12345);
+
+        var first = MapGenerator.Generate(options);
+        var second = MapGenerator.Generate(options);
+
+        for (var y = 0; y < options.Height; y++)
+        {
+            for (var x = 0; x < options.Width; x++)
+            {
+                var cell = new Cell(x, y);
+
+                Assert.Equal(
+                    first.GetTerrain(cell),
+                    second.GetTerrain(cell));
+            }
+        }
+    }
+
+    [Fact]
+    public void Generate_DifferentSeed_CanGiveDifferentMap()
+    {
+        var first = MapGenerator.Generate(CreateOptions(1));
+        var second = MapGenerator.Generate(CreateOptions(2));
+
+        var mapsAreDifferent = false;
+
+        for (var y = 0; y < first.Height && !mapsAreDifferent; y++)
+        {
+            for (var x = 0; x < first.Width; x++)
+            {
+                var cell = new Cell(x, y);
+
+                if (first.GetTerrain(cell) != second.GetTerrain(cell))
+                {
+                    mapsAreDifferent = true;
+                    break;
+                }
+            }
+        }
+
+        Assert.True(mapsAreDifferent);
+    }
+
+    [Fact]
+    public void Generate_ContainsWater()
+    {
+        var grid = MapGenerator.Generate(CreateOptions(777));
+
+        var hasWater = false;
+
+        for (var y = 0; y < grid.Height && !hasWater; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                if (grid.GetTerrain(new Cell(x, y)) == TerrainType.Water)
+                {
+                    hasWater = true;
+                    break;
+                }
+            }
+        }
+
+        Assert.True(hasWater);
+    }
+
+    [Fact]
+    public void Generate_AllCellsHaveValidTerrain()
+    {
+        var grid = MapGenerator.Generate(CreateOptions(888));
+
+        var validTerrainTypes = new[]
+        {
+            TerrainType.Plain,
+            TerrainType.Forest,
+            TerrainType.Slope,
+            TerrainType.Cliff,
+            TerrainType.ResourceCliff,
+            TerrainType.Water
+        };
+
+        for (var y = 0; y < grid.Height; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                Assert.Contains(
+                    grid.GetTerrain(new Cell(x, y)),
+                    validTerrainTypes);
+            }
+        }
+    }
+
+    [Fact]
+    public void Generate_ZeroWidth_Throws()
+    {
+        var options = new MapGenerationOptions(
+            0,
+            10,
+            1,
+            1,
+            1,
+            2);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MapGenerator.Generate(options));
+    }
+
+    [Fact]
+    public void Generate_NegativeLakeCount_Throws()
+    {
+        var options = new MapGenerationOptions(
+            10,
+            10,
+            1,
+            -1,
+            1,
+            2);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MapGenerator.Generate(options));
+    }
 }
