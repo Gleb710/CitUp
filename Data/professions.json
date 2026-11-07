@@ -1,0 +1,16 @@
+{
+  "professions": [
+    {
+      "id": "builder",
+      "name": "Строитель",
+      "workTicks": 600,
+      "restTicks": 300
+    },
+    {
+      "id": "porter",
+      "name": "Носильщик",
+      "workTicks": 600,
+      "restTicks": 300
+    }
+  ]
+}
