@@ -1,0 +1,28 @@
+{
+  "money": {
+    "id": "money",
+    "name": "Деньги"
+  },
+  "resources": [
+    {
+      "id": "wood",
+      "name": "Древесина"
+    },
+    {
+      "id": "planks",
+      "name": "Доски"
+    },
+    {
+      "id": "stone",
+      "name": "Камень"
+    },
+    {
+      "id": "water",
+      "name": "Вода"
+    },
+    {
+      "id": "fish",
+      "name": "Рыба"
+    }
+  ]
+}
