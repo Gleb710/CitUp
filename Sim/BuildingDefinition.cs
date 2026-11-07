@@ -1,8 +1,9 @@
 namespace CitUp.Sim;
 
 /// <summary>
-/// Геометрия здания из Data/buildings.json.
-/// Стоимость, рецепты, требования к местности и правила поворота будут добавлены позже.
+/// Описание здания из Data/buildings.json:
+/// геометрия, стоимость и время строительства.
+/// Рецепты, профессии и требования к местности будут добавлены позже.
 /// </summary>
 public sealed record BuildingDefinition(
     string Id,
@@ -10,7 +11,9 @@ public sealed record BuildingDefinition(
     BuildingMask Footprint,
     BuildingMask Clearance,
     BuildingMask? Access,
-    IReadOnlyList<int> Rotations)
+    IReadOnlyList<int> Rotations,
+    BuildingCost Cost,
+    int ConstructionTimeTicks)
 {
     public int Width => Footprint.Width;
 

@@ -3,6 +3,11 @@
     {
       "id": "townhall",
       "name": "Ратуша",
+      "cost": {
+            "money": 0,
+            "resources": {}
+        },
+  "constructionTimeTicks": 0,
       "footprint": [
         "FFFFF",
         "FFFFF",
@@ -27,6 +32,14 @@
     {
       "id": "house",
       "name": "Дом",
+      "cost": {
+            "money": 180,
+            "resources": {
+                "wood": 10,
+                "stone": 10
+            }
+        },
+  "constructionTimeTicks": 2100,
       "footprint": [
         "FF",
         "FF"
@@ -41,6 +54,15 @@
     {
       "id": "well",
       "name": "Колодец",
+      "cost": {
+            "money": 140,
+            "resources": {
+                "stone": 10,
+                "wood": 5,
+                "planks": 5
+            }
+        },
+      "constructionTimeTicks": 900,
       "footprint": [
         "FF",
         "FF"
@@ -55,6 +77,13 @@
     {
       "id": "woodcutter",
       "name": "Хижина дровосека",
+      "cost": {
+            "money": 120,
+            "resources": {
+                "wood": 10
+            }
+        },
+      "constructionTimeTicks": 2400,
       "footprint": [
         "FFF",
         "FFF",
@@ -71,6 +100,13 @@
     {
       "id": "sawmill",
       "name": "Лесопилка",
+      "cost": {
+            "money": 350,
+            "resources": {
+                "wood": 30
+            }
+        },
+      "constructionTimeTicks": 3000,
       "footprint": [
         "FFFF",
         "FFFF",
@@ -89,6 +125,13 @@
     {
       "id": "fisherman",
       "name": "Хижина рыбака",
+      "cost": {
+            "money": 100,
+            "resources": {
+                "wood": 10
+            }
+        },
+      "constructionTimeTicks": 1800,
       "footprint": [
         "....",
         "....",
@@ -115,6 +158,14 @@
     {
       "id": "mine",
       "name": "Шахта",
+      "cost": {
+            "money": 200,
+            "resources": {
+                "wood": 10,
+                "planks": 20
+            }
+        },
+      "constructionTimeTicks": 3000,
       "footprint": [
         "....",
         "....",

@@ -263,4 +263,81 @@ public class BuildingCatalogTests
         Assert.Throws<InvalidDataException>(
             () => BuildingCatalog.FromJson(json));
     }
+    
+    [Fact]
+    public void LoadDefault_HasConstructionData()
+    {
+        var catalog = BuildingCatalog.LoadDefault();
+
+        var house = catalog.FindBuilding("house")!;
+
+        Assert.Equal(180, house.Cost.Money);
+        Assert.Equal(2100, house.ConstructionTimeTicks);
+
+        var wood = house.Cost.Resources.Single(resource => resource.ResourceId == "wood");
+        var stone = house.Cost.Resources.Single(resource => resource.ResourceId == "stone");
+
+        Assert.Equal(10, wood.Amount);
+        Assert.Equal(10, stone.Amount);
+
+        var townhall = catalog.FindBuilding("townhall")!;
+
+        Assert.Equal(0, townhall.Cost.Money);
+        Assert.Empty(townhall.Cost.Resources);
+        Assert.Equal(0, townhall.ConstructionTimeTicks);
+    }
+
+    [Fact]
+    public void FromJson_UnknownCostResource_Throws()
+    {
+        const string json = """
+                            {
+                              "buildings": [
+                                {
+                                  "id": "house",
+                                  "name": "Дом",
+                                  "cost": {
+                                    "money": 180,
+                                    "resources": {
+                                      "gold": 10
+                                    }
+                                  },
+                                  "constructionTimeTicks": 2100,
+                                  "footprint": ["FF", "FF"],
+                                  "clearance": ["CCCC", "C..C", "C..C", "CCCC"]
+                                }
+                              ]
+                            }
+                            """;
+
+        var exception = Assert.Throws<InvalidDataException>(
+            () => BuildingCatalog.FromJson(json));
+
+        Assert.Contains("gold", exception.Message);
+    }
+
+    [Fact]
+    public void FromJson_NegativeConstructionTime_Throws()
+    {
+        const string json = """
+                            {
+                              "buildings": [
+                                {
+                                  "id": "house",
+                                  "name": "Дом",
+                                  "cost": {
+                                    "money": 180,
+                                    "resources": {}
+                                  },
+                                  "constructionTimeTicks": -1,
+                                  "footprint": ["FF", "FF"],
+                                  "clearance": ["CCCC", "C..C", "C..C", "CCCC"]
+                                }
+                              ]
+                            }
+                            """;
+
+        Assert.Throws<InvalidDataException>(
+            () => BuildingCatalog.FromJson(json));
+    }
 }

@@ -19,9 +19,14 @@ public sealed class BuildingCatalog
         _buildingsById.GetValueOrDefault(buildingId);
 
     public static BuildingCatalog LoadDefault() =>
-        FromJson(GameData.LoadText("buildings.json"));
+        FromJson(
+            GameData.LoadText("buildings.json"),
+            ResourceCatalog.LoadDefault());
 
-    public static BuildingCatalog FromJson(string json)
+    public static BuildingCatalog FromJson(string json) =>
+        FromJson(json, ResourceCatalog.LoadDefault());
+
+    public static BuildingCatalog FromJson(string json, ResourceCatalog resources)
     {
         BuildingCatalogData? data;
 
@@ -38,7 +43,7 @@ public sealed class BuildingCatalog
         if (data is null)
             throw new InvalidDataException("Data/buildings.json пуст.");
 
-        Validate(data);
+        Validate(data, resources);
 
         var buildings = data.Buildings
             .Select(building => new BuildingDefinition(
@@ -47,13 +52,32 @@ public sealed class BuildingCatalog
                 new BuildingMask(building.Footprint),
                 new BuildingMask(building.Clearance),
                 building.Access is null ? null : new BuildingMask(building.Access),
-                building.Rotations))
+                building.Rotations,
+                CreateCost(building),
+                building.ConstructionTimeTicks))
             .ToArray();
 
         return new BuildingCatalog(buildings);
     }
 
-    private static void Validate(BuildingCatalogData data)
+    private static BuildingCost CreateCost(BuildingData building)
+    {
+        var cost = building.Cost
+                   ?? throw new InvalidDataException(
+                       $"В Data/buildings.json у здания {building.Id} отсутствует cost.");
+
+        var resources = cost.Resources
+                        ?? throw new InvalidDataException(
+                            $"В Data/buildings.json у здания {building.Id} cost.resources отсутствует.");
+
+        var amounts = resources
+            .Select(resource => new ResourceAmount(resource.Key, resource.Value))
+            .ToArray();
+
+        return new BuildingCost(cost.Money, amounts);
+    }
+
+    private static void Validate(BuildingCatalogData data, ResourceCatalog resources)
     {
         if (data.Buildings is null || data.Buildings.Count == 0)
             throw new InvalidDataException(
@@ -77,8 +101,6 @@ public sealed class BuildingCatalog
                 throw new InvalidDataException(
                     $"В Data/buildings.json у здания {building.Id} отсутствует name.");
 
-            ValidateRotations(building.Id, building.Rotations);
-            
             ValidateMask(
                 building.Id,
                 "footprint",
@@ -97,6 +119,66 @@ public sealed class BuildingCatalog
                     "access",
                     building.Access,
                     requireFootprint: false);
+
+            ValidateRotations(building.Id, building.Rotations);
+
+            ValidateCost(building, resources);
+        }
+    }
+
+    private static void ValidateCost(
+        BuildingData building,
+        ResourceCatalog resources)
+    {
+        var cost = building.Cost
+                   ?? throw new InvalidDataException(
+                       $"В Data/buildings.json у здания {building.Id} отсутствует cost.");
+
+        if (cost.Money < 0)
+            throw new InvalidDataException(
+                $"В Data/buildings.json у здания {building.Id} стоимость денег не может быть отрицательной.");
+
+        if (building.ConstructionTimeTicks < 0)
+            throw new InvalidDataException(
+                $"В Data/buildings.json у здания {building.Id} constructionTimeTicks не может быть отрицательным.");
+
+        var costResources = cost.Resources
+                            ?? throw new InvalidDataException(
+                                $"В Data/buildings.json у здания {building.Id} cost.resources отсутствует.");
+
+        foreach (var resource in costResources)
+        {
+            var resourceId = resource.Key;
+            var amount = resource.Value;
+
+            if (resources.FindResource(resourceId) is null)
+                throw new InvalidDataException(
+                    $"В Data/buildings.json здание {building.Id} ссылается " +
+                    $"на неизвестный ресурс: {resourceId}.");
+
+            if (amount <= 0)
+                throw new InvalidDataException(
+                    $"В Data/buildings.json здание {building.Id} имеет " +
+                    $"недопустимое количество ресурса {resourceId}: {amount}.");
+        }
+    }
+
+    private static void ValidateRotations(string buildingId, List<int> rotations)
+    {
+        var duplicateRotation = rotations
+            .GroupBy(rotation => rotation)
+            .FirstOrDefault(group => group.Count() > 1);
+
+        if (duplicateRotation is not null)
+            throw new InvalidDataException(
+                $"В Data/buildings.json у здания {buildingId} повторяется поворот: {duplicateRotation.Key}.");
+
+        foreach (var rotation in rotations)
+        {
+            if (rotation is not (0 or 90 or 180 or 270))
+                throw new InvalidDataException(
+                    $"В Data/buildings.json у здания {buildingId} недопустимый поворот: {rotation}. " +
+                    "Допустимы 0, 90, 180 и 270.");
         }
     }
 
@@ -154,31 +236,23 @@ public sealed class BuildingCatalog
 
         public string Name { get; set; } = "";
 
+        public BuildingCostData? Cost { get; set; }
+
+        public int ConstructionTimeTicks { get; set; }
+
         public List<string> Footprint { get; set; } = new();
 
         public List<string> Clearance { get; set; } = new();
 
         public List<string>? Access { get; set; }
-        
+
         public List<int> Rotations { get; set; } = new();
     }
-    
-    private static void ValidateRotations(string buildingId, List<int> rotations)
+
+    private sealed class BuildingCostData
     {
-        var duplicateRotation = rotations
-            .GroupBy(rotation => rotation)
-            .FirstOrDefault(group => group.Count() > 1);
+        public int Money { get; set; }
 
-        if (duplicateRotation is not null)
-            throw new InvalidDataException(
-                $"В Data/buildings.json у здания {buildingId} повторяется поворот: {duplicateRotation.Key}.");
-
-        foreach (var rotation in rotations)
-        {
-            if (rotation is not (0 or 90 or 180 or 270))
-                throw new InvalidDataException(
-                    $"В Data/buildings.json у здания {buildingId} недопустимый поворот: {rotation}. " +
-                    "Допустимы 0, 90, 180 и 270.");
-        }
+        public Dictionary<string, int> Resources { get; set; } = new();
     }
 }
