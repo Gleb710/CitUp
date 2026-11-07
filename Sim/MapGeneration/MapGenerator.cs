@@ -15,10 +15,67 @@ public static class MapGenerator
         GenerateCliffs(grid, random, options);
         GenerateResourceVeins(grid, random, options);
         GenerateSlopes(grid, random, options);
+        GenerateForests(grid, random, options);
 
         return grid;
     }
 
+    private static void GenerateForests(
+        TerrainGrid grid,
+        SeededRandom random,
+        MapGenerationOptions options)
+    {
+        for (var clusterIndex = 0; clusterIndex < options.ForestClusterCount; clusterIndex++)
+        {
+            var start = FindTerrainCell(
+                grid,
+                random,
+                TerrainType.Plain);
+
+            if (start is null)
+                return;
+
+            var isTwoByTwoCluster = random.NextInt(0, 2) == 1;
+
+            if (isTwoByTwoCluster &&
+                CanPlaceTwoByTwoForest(grid, start.Value))
+            {
+                PlaceTwoByTwoForest(grid, start.Value);
+            }
+            else
+            {
+                grid.SetTerrain(start.Value, TerrainType.Forest);
+            }
+        }
+    }
+
+    private static bool CanPlaceTwoByTwoForest(
+        TerrainGrid grid,
+        Cell start)
+    {
+        var cells = new[]
+        {
+            start,
+            new Cell(start.X + 1, start.Y),
+            new Cell(start.X, start.Y + 1),
+            new Cell(start.X + 1, start.Y + 1)
+        };
+
+        return cells.All(cell =>
+            grid.IsInside(cell) &&
+            grid.GetTerrain(cell) == TerrainType.Plain);
+    }
+
+    private static void PlaceTwoByTwoForest(
+        TerrainGrid grid,
+        Cell start)
+    {
+        grid.SetTerrain(start, TerrainType.Forest);
+        grid.SetTerrain(new Cell(start.X + 1, start.Y), TerrainType.Forest);
+        grid.SetTerrain(new Cell(start.X, start.Y + 1), TerrainType.Forest);
+        grid.SetTerrain(new Cell(start.X + 1, start.Y + 1), TerrainType.Forest);
+    }
+    
     private static void GenerateLakes(
         TerrainGrid grid,
         SeededRandom random,
@@ -191,6 +248,8 @@ public static class MapGenerator
         }
     }
 
+    
+    
     private static void AddNeighborsToFrontier(
         TerrainGrid grid,
         Cell cell,

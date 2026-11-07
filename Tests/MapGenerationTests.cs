@@ -377,4 +377,64 @@ public class MapGenerationTests
                    grid.GetTerrain(neighbor) == terrainType;
         });
     }
+    
+    [Fact]
+    public void Generate_ContainsForest()
+    {
+        var grid = MapGenerator.Generate(CreateOptions(505));
+
+        var hasForest = false;
+
+        for (var y = 0; y < grid.Height && !hasForest; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                if (grid.GetTerrain(new Cell(x, y)) == TerrainType.Forest)
+                {
+                    hasForest = true;
+                    break;
+                }
+            }
+        }
+
+        Assert.True(hasForest);
+    }
+
+    [Fact]
+    public void Generate_ForestDoesNotReplaceBlockedTerrain()
+    {
+        var grid = MapGenerator.Generate(CreateOptions(606));
+
+        for (var y = 0; y < grid.Height; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                var terrain = grid.GetTerrain(new Cell(x, y));
+
+                if (terrain != TerrainType.Forest)
+                    continue;
+
+                Assert.NotEqual(TerrainType.Water, terrain);
+                Assert.NotEqual(TerrainType.Cliff, terrain);
+                Assert.NotEqual(TerrainType.ResourceCliff, terrain);
+                Assert.NotEqual(TerrainType.Slope, terrain);
+            }
+        }
+    }
+
+    [Fact]
+    public void Generate_NegativeForestClusterCount_Throws()
+    {
+        var options = new MapGenerationOptions(
+            10,
+            10,
+            1,
+            1,
+            1,
+            2,
+            ForestClusterCount: -1);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MapGenerator.Generate(options));
+    }
 }

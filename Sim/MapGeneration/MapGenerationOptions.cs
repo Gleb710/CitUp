@@ -15,6 +15,7 @@ public sealed record MapGenerationOptions(
     int MinCliffSize = 6,
     int MaxCliffSize = 16,
     int ResourceVeinCount = 3,
+    int ForestClusterCount = 12,
     double SlopeChance = 0.35)
 {
     public void Validate()
@@ -73,6 +74,12 @@ public sealed record MapGenerationOptions(
                 ResourceVeinCount,
                 "Количество ресурсных жил не может быть отрицательным.");
 
+        if (ForestClusterCount < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(ForestClusterCount),
+                ForestClusterCount,
+                "Количество лесных кластеров не может быть отрицательным.");
+        
         if (SlopeChance is < 0.0 or > 1.0)
             throw new ArgumentOutOfRangeException(
                 nameof(SlopeChance),
