@@ -1,0 +1,69 @@
+{
+  "recipes": [
+    {
+      "id": "well_water",
+      "buildingId": "well",
+      "inputs": [],
+      "outputs": [
+        {
+          "resourceId": "water",
+          "amount": 8
+        }
+      ],
+      "cycleTicks": 300
+    },
+    {
+      "id": "fisherman_fish",
+      "buildingId": "fisherman",
+      "inputs": [],
+      "outputs": [
+        {
+          "resourceId": "fish",
+          "amount": 2
+        }
+      ],
+      "cycleTicks": 200
+    },
+    {
+      "id": "woodcutter_wood",
+      "buildingId": "woodcutter",
+      "inputs": [],
+      "outputs": [
+        {
+          "resourceId": "wood",
+          "amount": 6
+        }
+      ],
+      "cycleTicks": 400
+    },
+    {
+      "id": "sawmill_planks",
+      "buildingId": "sawmill",
+      "inputs": [
+        {
+          "resourceId": "wood",
+          "amount": 2
+        }
+      ],
+      "outputs": [
+        {
+          "resourceId": "planks",
+          "amount": 4
+        }
+      ],
+      "cycleTicks": 200
+    },
+    {
+      "id": "mine_stone",
+      "buildingId": "mine",
+      "inputs": [],
+      "outputs": [
+        {
+          "resourceId": "stone",
+          "amount": 4
+        }
+      ],
+      "cycleTicks": 300
+    }
+  ]
+}
