@@ -10,7 +10,12 @@ public sealed record MapGenerationOptions(
     ulong Seed,
     int LakeCount,
     int MinLakeSize,
-    int MaxLakeSize)
+    int MaxLakeSize,
+    int CliffClusterCount = 4,
+    int MinCliffSize = 6,
+    int MaxCliffSize = 16,
+    int ResourceVeinCount = 3,
+    double SlopeChance = 0.35)
 {
     public void Validate()
     {
@@ -43,5 +48,35 @@ public sealed record MapGenerationOptions(
                 nameof(MaxLakeSize),
                 MaxLakeSize,
                 "Максимальный размер озера не может быть меньше минимального.");
+
+        if (CliffClusterCount < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(CliffClusterCount),
+                CliffClusterCount,
+                "Количество обрывов не может быть отрицательным.");
+
+        if (MinCliffSize <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(MinCliffSize),
+                MinCliffSize,
+                "Минимальный размер обрыва должен быть больше 0.");
+
+        if (MaxCliffSize < MinCliffSize)
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxCliffSize),
+                MaxCliffSize,
+                "Максимальный размер обрыва не может быть меньше минимального.");
+
+        if (ResourceVeinCount < 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(ResourceVeinCount),
+                ResourceVeinCount,
+                "Количество ресурсных жил не может быть отрицательным.");
+
+        if (SlopeChance is < 0.0 or > 1.0)
+            throw new ArgumentOutOfRangeException(
+                nameof(SlopeChance),
+                SlopeChance,
+                "Вероятность склона должна быть от 0 до 1.");
     }
 }

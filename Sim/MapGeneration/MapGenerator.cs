@@ -12,6 +12,9 @@ public static class MapGenerator
         var random = new SeededRandom(options.Seed);
 
         GenerateLakes(grid, random, options);
+        GenerateCliffs(grid, random, options);
+        GenerateResourceVeins(grid, random, options);
+        GenerateSlopes(grid, random, options);
 
         return grid;
     }
@@ -27,16 +30,113 @@ public static class MapGenerator
                 options.MinLakeSize,
                 options.MaxLakeSize + 1);
 
-            var start = FindPlainCell(grid, random);
+            var start = FindTerrainCell(
+                grid,
+                random,
+                TerrainType.Plain);
 
             if (start is null)
                 return;
 
-            GenerateLake(grid, random, start.Value, targetSize);
+            GrowTerrain(
+                grid,
+                random,
+                start.Value,
+                targetSize,
+                TerrainType.Water,
+                TerrainType.Plain);
         }
     }
 
-    private static Cell? FindPlainCell(TerrainGrid grid, SeededRandom random)
+    private static void GenerateCliffs(
+        TerrainGrid grid,
+        SeededRandom random,
+        MapGenerationOptions options)
+    {
+        for (var cliffIndex = 0; cliffIndex < options.CliffClusterCount; cliffIndex++)
+        {
+            var targetSize = random.NextInt(
+                options.MinCliffSize,
+                options.MaxCliffSize + 1);
+
+            var start = FindTerrainCell(
+                grid,
+                random,
+                TerrainType.Plain);
+
+            if (start is null)
+                return;
+
+            GrowTerrain(
+                grid,
+                random,
+                start.Value,
+                targetSize,
+                TerrainType.Cliff,
+                TerrainType.Plain);
+        }
+    }
+
+    private static void GenerateResourceVeins(
+        TerrainGrid grid,
+        SeededRandom random,
+        MapGenerationOptions options)
+    {
+        for (var veinIndex = 0; veinIndex < options.ResourceVeinCount; veinIndex++)
+        {
+            var veinStart = FindResourceVeinStart(grid, random);
+
+            if (veinStart is null)
+                return;
+
+            var direction = GetOrthogonalDirection(
+                grid,
+                veinStart.Value,
+                TerrainType.Cliff);
+
+            if (direction is null)
+                continue;
+
+            var secondCell = new Cell(
+                veinStart.Value.X + direction.Value.X,
+                veinStart.Value.Y + direction.Value.Y);
+
+            grid.SetTerrain(veinStart.Value, TerrainType.ResourceCliff);
+            grid.SetTerrain(secondCell, TerrainType.ResourceCliff);
+        }
+    }
+
+    private static void GenerateSlopes(
+        TerrainGrid grid,
+        SeededRandom random,
+        MapGenerationOptions options)
+    {
+        for (var y = 0; y < grid.Height; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                var cell = new Cell(x, y);
+
+                if (grid.GetTerrain(cell) != TerrainType.Plain)
+                    continue;
+
+                var hasCliffNeighbor =
+                    HasOrthogonalNeighbor(grid, cell, TerrainType.Cliff) ||
+                    HasOrthogonalNeighbor(grid, cell, TerrainType.ResourceCliff);
+
+                if (hasCliffNeighbor &&
+                    random.NextDouble() < options.SlopeChance)
+                {
+                    grid.SetTerrain(cell, TerrainType.Slope);
+                }
+            }
+        }
+    }
+
+    private static Cell? FindTerrainCell(
+        TerrainGrid grid,
+        SeededRandom random,
+        TerrainType terrainType)
     {
         for (var attempt = 0; attempt < 100; attempt++)
         {
@@ -44,63 +144,162 @@ public static class MapGenerator
                 random.NextInt(0, grid.Width),
                 random.NextInt(0, grid.Height));
 
-            if (grid.GetTerrain(cell) == TerrainType.Plain)
+            if (grid.GetTerrain(cell) == terrainType)
                 return cell;
         }
 
         return null;
     }
 
-    private static void GenerateLake(
+    private static void GrowTerrain(
         TerrainGrid grid,
         SeededRandom random,
         Cell start,
-        int targetSize)
+        int targetSize,
+        TerrainType terrainType,
+        TerrainType replaceableTerrain)
     {
         var frontier = new List<Cell>();
-        var waterCount = 0;
+        var generatedCount = 0;
 
-        grid.SetTerrain(start, TerrainType.Water);
-        waterCount++;
+        grid.SetTerrain(start, terrainType);
+        generatedCount++;
 
-        AddNeighborsToFrontier(grid, start, frontier);
+        AddNeighborsToFrontier(
+            grid,
+            start,
+            frontier,
+            replaceableTerrain);
 
-        while (waterCount < targetSize && frontier.Count > 0)
+        while (generatedCount < targetSize && frontier.Count > 0)
         {
             var frontierIndex = random.NextInt(0, frontier.Count);
             var cell = frontier[frontierIndex];
             frontier.RemoveAt(frontierIndex);
 
-            if (grid.GetTerrain(cell) != TerrainType.Plain)
+            if (grid.GetTerrain(cell) != replaceableTerrain)
                 continue;
 
-            grid.SetTerrain(cell, TerrainType.Water);
-            waterCount++;
+            grid.SetTerrain(cell, terrainType);
+            generatedCount++;
 
-            AddNeighborsToFrontier(grid, cell, frontier);
+            AddNeighborsToFrontier(
+                grid,
+                cell,
+                frontier,
+                replaceableTerrain);
         }
     }
 
     private static void AddNeighborsToFrontier(
         TerrainGrid grid,
         Cell cell,
-        List<Cell> frontier)
+        List<Cell> frontier,
+        TerrainType replaceableTerrain)
     {
-        AddIfPlain(grid, new Cell(cell.X - 1, cell.Y), frontier);
-        AddIfPlain(grid, new Cell(cell.X + 1, cell.Y), frontier);
-        AddIfPlain(grid, new Cell(cell.X, cell.Y - 1), frontier);
-        AddIfPlain(grid, new Cell(cell.X, cell.Y + 1), frontier);
+        AddIfTerrain(
+            grid,
+            new Cell(cell.X - 1, cell.Y),
+            frontier,
+            replaceableTerrain);
+
+        AddIfTerrain(
+            grid,
+            new Cell(cell.X + 1, cell.Y),
+            frontier,
+            replaceableTerrain);
+
+        AddIfTerrain(
+            grid,
+            new Cell(cell.X, cell.Y - 1),
+            frontier,
+            replaceableTerrain);
+
+        AddIfTerrain(
+            grid,
+            new Cell(cell.X, cell.Y + 1),
+            frontier,
+            replaceableTerrain);
     }
 
-    private static void AddIfPlain(
+    private static void AddIfTerrain(
         TerrainGrid grid,
         Cell cell,
-        List<Cell> frontier)
+        List<Cell> frontier,
+        TerrainType terrainType)
     {
         if (grid.IsInside(cell) &&
-            grid.GetTerrain(cell) == TerrainType.Plain)
+            grid.GetTerrain(cell) == terrainType)
         {
             frontier.Add(cell);
         }
     }
+
+    private static Cell? FindResourceVeinStart(
+        TerrainGrid grid,
+        SeededRandom random)
+    {
+        var candidates = new List<Cell>();
+
+        for (var y = 0; y < grid.Height; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                var cell = new Cell(x, y);
+
+                if (grid.GetTerrain(cell) != TerrainType.Cliff)
+                    continue;
+
+                if (GetOrthogonalDirection(
+                        grid,
+                        cell,
+                        TerrainType.Cliff) is not null)
+                {
+                    candidates.Add(cell);
+                }
+            }
+        }
+
+        if (candidates.Count == 0)
+            return null;
+
+        var candidateIndex = random.NextInt(0, candidates.Count);
+
+        return candidates[candidateIndex];
+    }
+
+    private static Cell? GetOrthogonalDirection(
+        TerrainGrid grid,
+        Cell cell,
+        TerrainType terrainType)
+    {
+        var directions = new[]
+        {
+            new Cell(-1, 0),
+            new Cell(1, 0),
+            new Cell(0, -1),
+            new Cell(0, 1)
+        };
+
+        foreach (var direction in directions)
+        {
+            var neighbor = new Cell(
+                cell.X + direction.X,
+                cell.Y + direction.Y);
+
+            if (grid.IsInside(neighbor) &&
+                grid.GetTerrain(neighbor) == terrainType)
+            {
+                return direction;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasOrthogonalNeighbor(
+        TerrainGrid grid,
+        Cell cell,
+        TerrainType terrainType) =>
+        GetOrthogonalDirection(grid, cell, terrainType) is not null;
 }

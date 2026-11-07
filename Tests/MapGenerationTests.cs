@@ -250,4 +250,131 @@ public class MapGenerationTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => MapGenerator.Generate(options));
     }
+    
+    [Fact]
+    public void Generate_ContainsCliffs()
+    {
+        var grid = MapGenerator.Generate(CreateOptions(101));
+
+        var hasCliff = false;
+
+        for (var y = 0; y < grid.Height && !hasCliff; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                if (grid.GetTerrain(new Cell(x, y)) == TerrainType.Cliff)
+                {
+                    hasCliff = true;
+                    break;
+                }
+            }
+        }
+
+        Assert.True(hasCliff);
+    }
+
+    [Fact]
+    public void Generate_ResourceCliffsComeInPairs()
+    {
+        var grid = MapGenerator.Generate(CreateOptions(202));
+
+        var resourceCellCount = 0;
+
+        for (var y = 0; y < grid.Height; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                if (grid.GetTerrain(new Cell(x, y)) == TerrainType.ResourceCliff)
+                    resourceCellCount++;
+            }
+        }
+
+        Assert.True(resourceCellCount >= 2);
+        Assert.Equal(0, resourceCellCount % 2);
+    }
+
+    [Fact]
+    public void Generate_ResourceCliffsHaveOrthogonalNeighbor()
+    {
+        var grid = MapGenerator.Generate(CreateOptions(303));
+
+        for (var y = 0; y < grid.Height; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                var cell = new Cell(x, y);
+
+                if (grid.GetTerrain(cell) != TerrainType.ResourceCliff)
+                    continue;
+
+                var hasResourceNeighbor =
+                    HasNeighbor(grid, cell, TerrainType.ResourceCliff);
+
+                Assert.True(hasResourceNeighbor);
+            }
+        }
+    }
+
+    [Fact]
+    public void Generate_SlopesAreAdjacentToCliffs()
+    {
+        var grid = MapGenerator.Generate(CreateOptions(404));
+
+        for (var y = 0; y < grid.Height; y++)
+        {
+            for (var x = 0; x < grid.Width; x++)
+            {
+                var cell = new Cell(x, y);
+
+                if (grid.GetTerrain(cell) != TerrainType.Slope)
+                    continue;
+
+                var hasCliffNeighbor =
+                    HasNeighbor(grid, cell, TerrainType.Cliff) ||
+                    HasNeighbor(grid, cell, TerrainType.ResourceCliff);
+
+                Assert.True(hasCliffNeighbor);
+            }
+        }
+    }
+
+    [Fact]
+    public void Generate_NegativeSlopeChance_Throws()
+    {
+        var options = new MapGenerationOptions(
+            10,
+            10,
+            1,
+            1,
+            1,
+            2,
+            SlopeChance: -0.1);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => MapGenerator.Generate(options));
+    }
+
+    private static bool HasNeighbor(
+        TerrainGrid grid,
+        Cell cell,
+        TerrainType terrainType)
+    {
+        var directions = new[]
+        {
+            new Cell(-1, 0),
+            new Cell(1, 0),
+            new Cell(0, -1),
+            new Cell(0, 1)
+        };
+
+        return directions.Any(direction =>
+        {
+            var neighbor = new Cell(
+                cell.X + direction.X,
+                cell.Y + direction.Y);
+
+            return grid.IsInside(neighbor) &&
+                   grid.GetTerrain(neighbor) == terrainType;
+        });
+    }
 }
