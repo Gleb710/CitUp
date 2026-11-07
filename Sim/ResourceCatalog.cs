@@ -43,8 +43,11 @@ public sealed class ResourceCatalog
 
         Validate(data);
 
+        var money = data.Money
+                    ?? throw new InvalidDataException("В Data/resources.json отсутствует money.");
+
         return new ResourceCatalog(
-            new MoneyDefinition(data.Money.Id, data.Money.Name),
+            new MoneyDefinition(money.Id, money.Name),
             data.Resources
                 .Select(resource => new ResourceDefinition(resource.Id, resource.Name))
                 .ToArray());

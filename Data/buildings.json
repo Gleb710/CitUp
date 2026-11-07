@@ -1,0 +1,90 @@
+{
+  "buildings": [
+    {
+      "id": "townhall",
+      "name": "Ратуша",
+      "footprint": [
+        "FFFFF",
+        "FFFFF",
+        "FFFFF",
+        "FFFFF",
+        "FFFFF",
+        "PPPPP",
+        "PPPPP"
+      ],
+      "clearance": [
+        "CCCCCCC",
+        "C.....C",
+        "C.....C",
+        "C.....C",
+        "C.....C",
+        "C.....C",
+        "C.....C",
+        "C.....C",
+        "CCCCCCC"
+      ]
+    },
+    {
+      "id": "house",
+      "name": "Дом",
+      "footprint": [
+        "FF",
+        "FF"
+      ],
+      "clearance": [
+        "CCCC",
+        "C..C",
+        "C..C",
+        "CCCC"
+      ]
+    },
+    {
+      "id": "well",
+      "name": "Колодец",
+      "footprint": [
+        "FF",
+        "FF"
+      ],
+      "clearance": [
+        "CCCC",
+        "C..C",
+        "C..C",
+        "CCCC"
+      ]
+    },
+    {
+      "id": "woodcutter",
+      "name": "Хижина дровосека",
+      "footprint": [
+        "FFF",
+        "FFF",
+        "FFF"
+      ],
+      "clearance": [
+        "CCCCC",
+        "C...C",
+        "C...C",
+        "C...C",
+        "CCCCC"
+      ]
+    },
+    {
+      "id": "sawmill",
+      "name": "Лесопилка",
+      "footprint": [
+        "FFFF",
+        "FFFF",
+        "FFFF",
+        "FFFF"
+      ],
+      "clearance": [
+        "CCCCCC",
+        "C....C",
+        "C....C",
+        "C....C",
+        "C....C",
+        "CCCCCC"
+      ]
+    }
+  ]
+}
