@@ -6,17 +6,19 @@ namespace Tests;
 public class BuildingCatalogTests
 {
     [Fact]
-    public void LoadDefault_ContainsFiveBuildings()
+    public void LoadDefault_ContainsSevenBuildings()
     {
         var catalog = BuildingCatalog.LoadDefault();
 
-        Assert.Equal(5, catalog.Buildings.Count);
+        Assert.Equal(7, catalog.Buildings.Count);
 
         Assert.NotNull(catalog.FindBuilding("townhall"));
         Assert.NotNull(catalog.FindBuilding("house"));
         Assert.NotNull(catalog.FindBuilding("well"));
         Assert.NotNull(catalog.FindBuilding("woodcutter"));
         Assert.NotNull(catalog.FindBuilding("sawmill"));
+        Assert.NotNull(catalog.FindBuilding("fisherman"));
+        Assert.NotNull(catalog.FindBuilding("mine"));
 
         Assert.Null(catalog.FindBuilding("castle"));
     }
@@ -172,5 +174,93 @@ public class BuildingCatalogTests
             () => BuildingCatalog.FromJson("{ not json"));
 
         Assert.Contains("Data/buildings.json", exception.Message);
+    }
+    
+    [Fact]
+    public void Fisherman_HasFourRotations()
+    {
+        var fisherman = BuildingCatalog.LoadDefault().FindBuilding("fisherman")!;
+
+        Assert.Equal(new[] { 0, 90, 180, 270 }, fisherman.Rotations);
+        Assert.Equal(4, fisherman.Footprint.Width);
+        Assert.Equal(5, fisherman.Footprint.Height);
+
+        Assert.Equal(
+            BuildingMaskCell.Footprint,
+            fisherman.Footprint.GetCell(1, 2));
+
+        Assert.Equal(
+            BuildingMaskCell.Footprint,
+            fisherman.Footprint.GetCell(2, 3));
+
+        Assert.Equal(
+            BuildingMaskCell.Access,
+            fisherman.Access!.GetCell(0, 0));
+
+        Assert.Equal(
+            BuildingMaskCell.Access,
+            fisherman.Access.GetCell(3, 0));
+    }
+
+    [Fact]
+    public void Mine_HasFourRotations()
+    {
+        var mine = BuildingCatalog.LoadDefault().FindBuilding("mine")!;
+
+        Assert.Equal(new[] { 0, 90, 180, 270 }, mine.Rotations);
+        Assert.Equal(4, mine.Footprint.Width);
+        Assert.Equal(4, mine.Footprint.Height);
+
+        Assert.Equal(
+            BuildingMaskCell.Footprint,
+            mine.Footprint.GetCell(1, 2));
+
+        Assert.Equal(
+            BuildingMaskCell.Clearance,
+            mine.Clearance.GetCell(0, 0));
+    }
+
+    [Fact]
+    public void FromJson_InvalidRotation_Throws()
+    {
+        const string json = """
+            {
+              "buildings": [
+                {
+                  "id": "house",
+                  "name": "Дом",
+                  "footprint": ["FF", "FF"],
+                  "clearance": ["CCCC", "C..C", "C..C", "CCCC"],
+                  "rotations": [45]
+                }
+              ]
+            }
+            """;
+
+        var exception = Assert.Throws<InvalidDataException>(
+            () => BuildingCatalog.FromJson(json));
+
+        Assert.Contains("45", exception.Message);
+    }
+
+    [Fact]
+    public void FromJson_DuplicateRotation_Throws()
+    {
+        const string json = """
+            {
+              "buildings": [
+                {
+                  "id": "house",
+                  "name": "Дом",
+                  "footprint": ["FF", "FF"],
+                  "clearance": ["CCCC", "C..C", "C..C", "CCCC"],
+                  "rotations": [0, 0]
+                }
+              ]
+            }
+            """;
+
+        Assert.Throws<InvalidDataException>(
+            () => BuildingCatalog.FromJson(json));
     }
 }

@@ -46,7 +46,8 @@ public sealed class BuildingCatalog
                 building.Name,
                 new BuildingMask(building.Footprint),
                 new BuildingMask(building.Clearance),
-                building.Access is null ? null : new BuildingMask(building.Access)))
+                building.Access is null ? null : new BuildingMask(building.Access),
+                building.Rotations))
             .ToArray();
 
         return new BuildingCatalog(buildings);
@@ -76,6 +77,8 @@ public sealed class BuildingCatalog
                 throw new InvalidDataException(
                     $"В Data/buildings.json у здания {building.Id} отсутствует name.");
 
+            ValidateRotations(building.Id, building.Rotations);
+            
             ValidateMask(
                 building.Id,
                 "footprint",
@@ -156,5 +159,26 @@ public sealed class BuildingCatalog
         public List<string> Clearance { get; set; } = new();
 
         public List<string>? Access { get; set; }
+        
+        public List<int> Rotations { get; set; } = new();
+    }
+    
+    private static void ValidateRotations(string buildingId, List<int> rotations)
+    {
+        var duplicateRotation = rotations
+            .GroupBy(rotation => rotation)
+            .FirstOrDefault(group => group.Count() > 1);
+
+        if (duplicateRotation is not null)
+            throw new InvalidDataException(
+                $"В Data/buildings.json у здания {buildingId} повторяется поворот: {duplicateRotation.Key}.");
+
+        foreach (var rotation in rotations)
+        {
+            if (rotation is not (0 or 90 or 180 or 270))
+                throw new InvalidDataException(
+                    $"В Data/buildings.json у здания {buildingId} недопустимый поворот: {rotation}. " +
+                    "Допустимы 0, 90, 180 и 270.");
+        }
     }
 }
