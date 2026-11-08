@@ -23,6 +23,7 @@ public partial class Main : Node2D
     private WorldView _view = null!;
     private SimRunner _runner = null!;
     private Hud _hud = null!;
+    private ResourceCatalog _resourceCatalog = null!;
     private Label _infoLabel = null!;
     private NetManager _net = null!;
     private MenuPanel _menu = null!;
@@ -79,6 +80,7 @@ public partial class Main : Node2D
         _hud = GetNode<Hud>("CanvasLayer");
         _infoLabel = GetNode<Label>("CanvasLayer/InfoLabel");
         _net = GetNode<NetManager>("NetManager");
+        _resourceCatalog = ResourceCatalog.LoadDefault();
 
         _runner.Stepped += OnStepped;
 
@@ -838,8 +840,28 @@ public partial class Main : Node2D
         string cellText = _view.HoverCell is Cell cell ? $"({cell.X}, {cell.Y})" : "вне карты";
         long tick = _clock is not null ? (long)_clock.RenderTick : _world.CurrentTick;
         _infoLabel.Text = $"Клетка: {cellText}    Тик: {tick}";
+        var report = _world.GetResourceReport(_localPlayerId);
+        _hud.SetResources(FormatResources(report));
     }
 
+    private string FormatResources(ResourceReport report)
+    {
+        var lines = new List<string>
+        {
+            $"{_resourceCatalog.Money.Name}: {report.Money}"
+        };
+
+        foreach (var resource in _resourceCatalog.Resources)
+        {
+            var stockpile = report.Stockpile.GetValueOrDefault(resource.Id);
+            var local = report.LocalStockpiles.GetValueOrDefault(resource.Id);
+
+            lines.Add($"{resource.Name}: {stockpile} (+{local})");
+        }
+
+        return string.Join("\n", lines);
+    }
+    
     public override void _UnhandledInput(InputEvent @event)
     {
         // Служебные клавиши работают всегда, даже в меню

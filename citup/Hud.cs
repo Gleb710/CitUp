@@ -22,6 +22,7 @@ public partial class Hud : CanvasLayer
     private Label _message = null!;
     private Label _status = null!;
     private Label _indicator = null!;
+    private Label _resources = null!;
     private double _messageLeft;
 
     public override void _Ready()
@@ -35,6 +36,8 @@ public partial class Hud : CanvasLayer
         AddChild(_status);
         _indicator = new Label { Visible = false };
         AddChild(_indicator);
+        _resources = new Label();
+        AddChild(_resources);
 
         // Четыре строки одна под другой, у каждой крупный шрифт и тёмная обводка для читаемости на зелёном
         Place(info, 8f);
@@ -42,12 +45,15 @@ public partial class Hud : CanvasLayer
         Place(_message, 64f);
         Place(_status, 92f);
         Place(_indicator, 8f);
+        Place(_resources, 120f);
 
         _message.Text = "";
         _message.AddThemeColorOverride("font_color", new Color(1f, 0.6f, 0.5f));
         _status.AddThemeColorOverride("font_color", new Color(0.7f, 0.95f, 1f));
     }
 
+    public void SetResources(string text) => _resources.Text = text;
+    
     private static void Place(Label label, float y)
     {
         label.Position = new Vector2(10f, y);
@@ -100,6 +106,7 @@ public partial class Hud : CanvasLayer
         _message.Text = "";
         _status.Text = "";
         _messageLeft = 0;
+        _resources.Text = "";
     }
     
     public override void _Process(double delta)
