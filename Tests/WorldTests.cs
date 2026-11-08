@@ -12,8 +12,8 @@ public class WorldTests
     {
         var config = WorldConfig.LoadDefault();
 
-        Assert.Equal(32, config.Map.Width);
-        Assert.Equal(32, config.Map.Height);
+        Assert.Equal(80, config.Map.Width);
+        Assert.Equal(100, config.Map.Height);
         Assert.Equal(10, config.TicksPerSecond);
         Assert.Equal(3, config.BuildingTypes.Count);
         Assert.NotNull(config.FindBuildingType("house"));
@@ -24,18 +24,18 @@ public class WorldTests
     {
         var world = NewWorld();
 
-        Assert.Equal(32, world.Width);
-        Assert.Equal(32, world.Height);
+        Assert.Equal(80, world.Width);
+        Assert.Equal(100, world.Height);
         Assert.Equal(0, world.CurrentTick);
     }
 
     [Theory]
     [InlineData(0, 0, true)]
-    [InlineData(31, 31, true)]
+    [InlineData(79, 99, true)]
     [InlineData(-1, 0, false)]
     [InlineData(0, -1, false)]
-    [InlineData(32, 0, false)]
-    [InlineData(0, 32, false)]
+    [InlineData(80, 0, false)]
+    [InlineData(0, 100, false)]
     public void IsInside_ChecksMapBounds(int x, int y, bool expected)
     {
         Assert.Equal(expected, NewWorld().IsInside(new Cell(x, y)));
@@ -104,7 +104,7 @@ public class WorldTests
     [Fact]
     public void World_WithTerrain_UsesProvidedTerrain()
     {
-        var terrain = new TerrainGrid(32, 32);
+        var terrain = new TerrainGrid(80, 100);
         var cell = new Cell(5, 7);
 
         terrain.SetTerrain(cell, TerrainType.Water);

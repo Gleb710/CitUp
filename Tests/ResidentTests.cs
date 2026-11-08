@@ -107,17 +107,17 @@ public class ResidentTests
     public void CellAt_FollowsPathOverTime()
     {
         var (world, _) = Create();
-        var path = new[] { new Cell(16, 16), new Cell(17, 16), new Cell(18, 16) };
+        var path = new[] { new Cell(40, 50), new Cell(41, 50), new Cell(42, 50) };
         world.Apply(new ResidentWalkStarted(1, path, StartTick: 10));
         var resident = world.Residents[0];
         const int perCell = 5;
 
-        Assert.Equal(new Cell(16, 16), resident.CellAt(5, perCell));    // до старта
-        Assert.Equal(new Cell(16, 16), resident.CellAt(10, perCell));
-        Assert.Equal(new Cell(16, 16), resident.CellAt(14, perCell));
-        Assert.Equal(new Cell(17, 16), resident.CellAt(15, perCell));
-        Assert.Equal(new Cell(18, 16), resident.CellAt(20, perCell));
-        Assert.Equal(new Cell(18, 16), resident.CellAt(500, perCell));  // после финиша
+        Assert.Equal(new Cell(40, 50), resident.CellAt(5, perCell));    // до старта
+        Assert.Equal(new Cell(40, 50), resident.CellAt(10, perCell));
+        Assert.Equal(new Cell(40, 50), resident.CellAt(14, perCell));
+        Assert.Equal(new Cell(41, 50), resident.CellAt(15, perCell));
+        Assert.Equal(new Cell(42, 50), resident.CellAt(20, perCell));
+        Assert.Equal(new Cell(42, 50), resident.CellAt(500, perCell));  // после финиша
         Assert.Equal(20, resident.WalkEndTick(perCell));
     }
 
@@ -137,11 +137,11 @@ public class ResidentTests
     public void Build_OnResidentPath_IsRejected_ButOffThePathIsAllowed()
     {
         var (world, engine) = Create();
-        var path = new[] { new Cell(16, 16), new Cell(17, 16), new Cell(18, 16) };
+        var path = new[] { new Cell(40, 50), new Cell(41, 50), new Cell(42, 50) };
         world.Apply(new ResidentWalkStarted(1, path, StartTick: 10));
 
-        engine.Enqueue(Cmd(1, "house", 17, 16));   // на пути
-        engine.Enqueue(Cmd(2, "house", 17, 17));   // рядом с путём
+        engine.Enqueue(Cmd(1, "house", 41, 50));    // на пути
+        engine.Enqueue(Cmd(2, "house", 41, 51));    // рядом с путём
         var result = engine.Step();
 
         Assert.Equal(CommandError.CellBlockedByResident, result.Results[0].Error);

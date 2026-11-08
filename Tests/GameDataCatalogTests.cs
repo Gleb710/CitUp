@@ -119,8 +119,8 @@ public class GameDataCatalogTests
     {
         var gameData = GameDataCatalog.LoadDefault();
 
-        Assert.Equal(32, gameData.MapGeneration.Width);
-        Assert.Equal(32, gameData.MapGeneration.Height);
+        Assert.Equal(80, gameData.MapGeneration.Width);
+        Assert.Equal(100, gameData.MapGeneration.Height);
         Assert.Equal(3, gameData.MapGeneration.LakeCount);
         Assert.Equal(12, gameData.MapGeneration.ForestClusterCount);
     }

@@ -10,8 +10,8 @@ public class MapGenerationSettingsTests
     {
         var settings = MapGenerationSettingsLoader.LoadDefault();
 
-        Assert.Equal(32, settings.Width);
-        Assert.Equal(32, settings.Height);
+        Assert.Equal(80, settings.Width);
+        Assert.Equal(100, settings.Height);
 
         Assert.Equal(3, settings.LakeCount);
         Assert.Equal(8, settings.MinLakeSize);

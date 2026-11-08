@@ -53,8 +53,8 @@ public class BuildCommandTests
     [Theory]
     [InlineData(-1, 0)]
     [InlineData(0, -1)]
-    [InlineData(32, 0)]
-    [InlineData(0, 32)]
+    [InlineData(80, 0)]
+    [InlineData(0, 100)]
     public void Build_OutsideMap_IsRejected(int x, int y)
     {
         var (world, engine) = Create();

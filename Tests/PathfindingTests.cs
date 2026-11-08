@@ -78,6 +78,6 @@ public class PathfindingTests
     [Fact]
     public void Path_ToCellOutsideMap_ReturnsNull()
     {
-        Assert.Null(GridPathfinder.FindPath(NewWorld(), new Cell(0, 0), new Cell(40, 0)));
+        Assert.Null(GridPathfinder.FindPath(NewWorld(), new Cell(0, 0), new Cell(80, 0)));
     }
 }
