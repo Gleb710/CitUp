@@ -35,8 +35,20 @@ public sealed class WorldConfig
         AllowTrailingCommas = true
     };
 
-    public static WorldConfig LoadDefault() => FromJson(GameData.LoadText("phase1.json"));
+    public static WorldConfig LoadDefault()
+    {
+        var config = FromJson(GameData.LoadText("phase1.json"));
+        var mapGeneration = MapGenerationSettingsLoader.LoadDefault();
 
+        config.Map = new MapSettings
+        {
+            Width = mapGeneration.Width,
+            Height = mapGeneration.Height
+        };
+
+        return config;
+    }
+    
     public static WorldConfig FromJson(string json)
     {
         WorldConfig? config;
@@ -61,8 +73,6 @@ public sealed class WorldConfig
 
     private void Validate()
     {
-        if (Map.Width <= 0 || Map.Height <= 0)
-            throw new InvalidDataException("map.width и map.height должны быть больше 0.");
         if (TicksPerSecond <= 0)
             throw new InvalidDataException("ticksPerSecond должен быть больше 0.");
         if (Resident.TicksPerCell <= 0)

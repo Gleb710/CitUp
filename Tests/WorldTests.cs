@@ -69,18 +69,6 @@ public class WorldTests
 
         Assert.Contains("JSON", ex.Message);
     }
-
-    [Fact]
-    public void FromJson_ZeroMapWidth_Throws()
-    {
-        const string json = """
-            { "map": { "width": 0, "height": 32 }, "ticksPerSecond": 10,
-              "resident": { "ticksPerCell": 5, "pauseTicks": 20 },
-              "buildingTypes": [ { "id": "house", "name": "Дом", "color": "#fff" } ] }
-            """;
-
-        Assert.Throws<InvalidDataException>(() => WorldConfig.FromJson(json));
-    }
     
     [Fact]
     public void World_WithoutTerrain_CreatesPlainTerrain()
