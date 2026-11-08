@@ -57,4 +57,49 @@ public sealed class WorldStockpileTests
         Assert.Throws<InvalidOperationException>(
             () => world.GetStockpile(999));
     }
+    
+    [Fact]
+    public void PlayerStockpile_IsCreatedOnce()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+
+        var first = world.GetPlayerStockpile(1);
+        var second = world.GetPlayerStockpile(1);
+
+        Assert.Same(first, second);
+    }
+
+    [Fact]
+    public void PlayerStockpile_StoresMoneyAndResourcesSeparately()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+        var stockpile = world.GetPlayerStockpile(1);
+
+        stockpile.AddMoney(1000);
+        stockpile.AddResource("wood", 50);
+
+        Assert.Equal(1000, stockpile.Money);
+        Assert.Equal(50, stockpile.GetResourceAmount("wood"));
+        Assert.Single(stockpile.Resources);
+    }
+
+    [Fact]
+    public void PlayerStockpile_DifferentOwners_AreSeparate()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+
+        var first = world.GetPlayerStockpile(1);
+        var second = world.GetPlayerStockpile(2);
+
+        Assert.NotSame(first, second);
+    }
+
+    [Fact]
+    public void PlayerStockpile_InvalidOwner_Throws()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => world.GetPlayerStockpile(0));
+    }
 }

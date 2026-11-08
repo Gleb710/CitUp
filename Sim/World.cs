@@ -6,6 +6,7 @@ public sealed class World
     private readonly List<Building> _buildings = new();
     private readonly Dictionary<Cell, Building> _buildingByCell = new();
     private readonly Dictionary<int, ResourceStore> _stockpilesByBuildingId = new();
+    private readonly Dictionary<int, ResourceStore> _stockpilesByOwnerId = new();
     private readonly List<Resident> _residents = new();
 
     public WorldConfig Config { get; }
@@ -83,6 +84,23 @@ public sealed class World
         return stockpile;
     }
 
+    public ResourceStore GetPlayerStockpile(int ownerId)
+    {
+        if (ownerId <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(ownerId),
+                ownerId,
+                "Идентификатор игрока должен быть больше 0.");
+
+        if (!_stockpilesByOwnerId.TryGetValue(ownerId, out var stockpile))
+        {
+            stockpile = new ResourceStore();
+            _stockpilesByOwnerId[ownerId] = stockpile;
+        }
+
+        return stockpile;
+    }
+    
     public ResourceStore GetStockpile(int buildingId)
     {
         var building = FindBuilding(buildingId)
