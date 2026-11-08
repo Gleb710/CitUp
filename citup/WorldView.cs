@@ -99,7 +99,16 @@ public partial class WorldView : Node2D
     private Color GetTerrainColor(Cell cell)
     {
         var terrain = _world.Terrain.GetTerrain(cell);
+        var color = GetBaseTerrainColor(terrain, cell);
 
+        var elevation = _world.Terrain.GetElevation(cell);
+        var darkening = System.Math.Min(elevation * 0.08f, 0.35f);
+
+        return color.Darkened(darkening);
+    }
+
+    private Color GetBaseTerrainColor(TerrainType terrain, Cell cell)
+    {
         return terrain switch
         {
             TerrainType.Plain => (cell.X + cell.Y) % 2 == 0 ? GrassA : GrassB,

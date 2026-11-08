@@ -316,9 +316,59 @@ public class MapGenerationTests
     }
 
     [Fact]
-    public void Generate_SlopesAreAdjacentToCliffs()
+    public void Generate_SlopesConnectAdjacentElevationLevels()
     {
-        var grid = MapGenerator.Generate(CreateOptions(404));
+        var options = CreateOptions(42);
+        var grid = MapGenerator.Generate(options);
+
+        var slopeCells = GetCells(grid, TerrainType.Slope);
+
+        Assert.NotEmpty(slopeCells);
+
+        foreach (var cell in slopeCells)
+        {
+            var hasAdjacentLevelDifference = GetOrthogonalNeighbors(grid, cell)
+                .Any(neighbor =>
+                    Math.Abs(
+                        grid.GetElevation(cell) -
+                        grid.GetElevation(neighbor)) == 1);
+
+            Assert.True(
+                hasAdjacentLevelDifference,
+                $"Склон в клетке {cell} должен соединять соседние уровни высоты.");
+        }
+    }
+
+    [Fact]
+    public void Generate_CliffsCanRepresentMultiLevelBoundaries()
+    {
+        var options = CreateOptions(42);
+        var grid = MapGenerator.Generate(options);
+
+        var cliffCells = GetCells(grid, TerrainType.Cliff)
+            .Concat(GetCells(grid, TerrainType.ResourceCliff))
+            .ToList();
+
+        Assert.NotEmpty(cliffCells);
+
+        foreach (var cell in cliffCells)
+        {
+            var hasElevationDifference = GetOrthogonalNeighbors(grid, cell)
+                .Any(neighbor =>
+                    grid.GetElevation(cell) !=
+                    grid.GetElevation(neighbor));
+
+            Assert.True(
+                hasElevationDifference,
+                $"Обрыв в клетке {cell} должен находиться на перепаде высоты.");
+        }
+    }
+
+    private static List<Cell> GetCells(
+        TerrainGrid grid,
+        TerrainType terrainType)
+    {
+        var cells = new List<Cell>();
 
         for (var y = 0; y < grid.Height; y++)
         {
@@ -326,18 +376,41 @@ public class MapGenerationTests
             {
                 var cell = new Cell(x, y);
 
-                if (grid.GetTerrain(cell) != TerrainType.Slope)
-                    continue;
-
-                var hasCliffNeighbor =
-                    HasNeighbor(grid, cell, TerrainType.Cliff) ||
-                    HasNeighbor(grid, cell, TerrainType.ResourceCliff);
-
-                Assert.True(hasCliffNeighbor);
+                if (grid.GetTerrain(cell) == terrainType)
+                    cells.Add(cell);
             }
         }
+
+        return cells;
     }
 
+    private static List<Cell> GetOrthogonalNeighbors(
+        TerrainGrid grid,
+        Cell cell)
+    {
+        var directions = new[]
+        {
+            new Cell(-1, 0),
+            new Cell(1, 0),
+            new Cell(0, -1),
+            new Cell(0, 1)
+        };
+
+        var neighbors = new List<Cell>();
+
+        foreach (var direction in directions)
+        {
+            var neighbor = new Cell(
+                cell.X + direction.X,
+                cell.Y + direction.Y);
+
+            if (grid.IsInside(neighbor))
+                neighbors.Add(neighbor);
+        }
+
+        return neighbors;
+    }
+    
     [Fact]
     public void Generate_NegativeSlopeChance_Throws()
     {
