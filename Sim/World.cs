@@ -5,6 +5,7 @@ public sealed class World
 {
     private readonly List<Building> _buildings = new();
     private readonly Dictionary<Cell, Building> _buildingByCell = new();
+    private readonly Dictionary<int, ResourceStore> _stockpilesByBuildingId = new();
     private readonly List<Resident> _residents = new();
 
     public WorldConfig Config { get; }
@@ -62,6 +63,35 @@ public sealed class World
     /// <summary>Здание в клетке или null, если клетка свободна.</summary>
     public Building? BuildingAt(Cell cell) => _buildingByCell.GetValueOrDefault(cell);
 
+    public Building? FindBuilding(int buildingId) =>
+        _buildings.FirstOrDefault(building => building.Id == buildingId);
+    
+    public ResourceStore GetStockpile(Building building)
+    {
+        ArgumentNullException.ThrowIfNull(building);
+
+        if (FindBuilding(building.Id) is null)
+            throw new InvalidOperationException(
+                $"Склад можно получить только для существующего здания {building.Id}.");
+
+        if (!_stockpilesByBuildingId.TryGetValue(building.Id, out var stockpile))
+        {
+            stockpile = new ResourceStore();
+            _stockpilesByBuildingId[building.Id] = stockpile;
+        }
+
+        return stockpile;
+    }
+
+    public ResourceStore GetStockpile(int buildingId)
+    {
+        var building = FindBuilding(buildingId)
+                       ?? throw new InvalidOperationException(
+                           $"Здание {buildingId} не найдено.");
+
+        return GetStockpile(building);
+    }
+    
     public Resident? FindResident(int id) => _residents.FirstOrDefault(r => r.Id == id);
 
     /// <summary>Стоит ли в клетке житель или проходит ли через неё чей-то маршрут.</summary>
