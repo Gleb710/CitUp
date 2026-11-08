@@ -437,4 +437,69 @@ public class MapGenerationTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => MapGenerator.Generate(options));
     }
+    
+    [Fact]
+    public void CreateNewParty_CreatesWorldWithGeneratedTerrain()
+    {
+        var gameData = GameDataCatalog.LoadDefault();
+
+        var world = PartyFactory.CreateNewParty(gameData, 12345);
+
+        Assert.Equal(
+            gameData.MapGeneration.Width,
+            world.Terrain.Width);
+
+        Assert.Equal(
+            gameData.MapGeneration.Height,
+            world.Terrain.Height);
+    }
+
+    [Fact]
+    public void CreateNewParty_SameSeed_GivesSameTerrain()
+    {
+        var gameData = GameDataCatalog.LoadDefault();
+
+        var first = PartyFactory.CreateNewParty(gameData, 12345);
+        var second = PartyFactory.CreateNewParty(gameData, 12345);
+
+        for (var y = 0; y < first.Height; y++)
+        {
+            for (var x = 0; x < first.Width; x++)
+            {
+                var cell = new Cell(x, y);
+
+                Assert.Equal(
+                    first.Terrain.GetTerrain(cell),
+                    second.Terrain.GetTerrain(cell));
+            }
+        }
+    }
+
+    [Fact]
+    public void CreateNewParty_DifferentSeed_CanGiveDifferentTerrain()
+    {
+        var gameData = GameDataCatalog.LoadDefault();
+
+        var first = PartyFactory.CreateNewParty(gameData, 1);
+        var second = PartyFactory.CreateNewParty(gameData, 2);
+
+        var mapsAreDifferent = false;
+
+        for (var y = 0; y < first.Height && !mapsAreDifferent; y++)
+        {
+            for (var x = 0; x < first.Width; x++)
+            {
+                var cell = new Cell(x, y);
+
+                if (first.Terrain.GetTerrain(cell) !=
+                    second.Terrain.GetTerrain(cell))
+                {
+                    mapsAreDifferent = true;
+                    break;
+                }
+            }
+        }
+
+        Assert.True(mapsAreDifferent);
+    }
 }

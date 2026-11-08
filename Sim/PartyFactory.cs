@@ -1,0 +1,25 @@
+namespace CitUp.Sim;
+
+/// <summary>Создаёт новую партию с детерминированно сгенерированной картой.</summary>
+public static class PartyFactory
+{
+    public static World CreateNewParty(GameDataCatalog gameData, ulong seed)
+    {
+        ArgumentNullException.ThrowIfNull(gameData);
+
+        var options = gameData.MapGeneration.ToOptions(seed);
+        var terrain = MapGenerator.Generate(options);
+
+        var worldConfig = WorldConfig.LoadDefault();
+
+        if (worldConfig.Map.Width != options.Width ||
+            worldConfig.Map.Height != options.Height)
+        {
+            throw new InvalidDataException(
+                $"Размер карты в WorldConfig {worldConfig.Map.Width}×{worldConfig.Map.Height} " +
+                $"не совпадает с размером из настроек генерации {options.Width}×{options.Height}.");
+        }
+
+        return new World(worldConfig, terrain);
+    }
+}
