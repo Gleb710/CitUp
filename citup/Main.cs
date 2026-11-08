@@ -30,6 +30,7 @@ public partial class Main : Node2D
     private ResidentView? _residentView;
 
     private Mode _mode = Mode.Menu;
+    private ulong _partySeed;
 
     // Одиночная игра и хост: есть World, SimEngine и учёт команд. Клиент: только World по снимку.
     private World? _world;
@@ -178,13 +179,18 @@ public partial class Main : Node2D
     /// <summary>Создаёт мир и движок: для одиночной игры и для хоста.</summary>
     private void StartWorld()
     {
-        var config = WorldConfig.LoadDefault();
-        _world = new World(config);
-        _sim = new SimEngine(_world, seed: Random.Shared.Next());
+        var gameData = GameDataCatalog.LoadDefault();
+
+        _partySeed = unchecked((ulong)Random.Shared.NextInt64());
+
+        _world = PartyFactory.CreateNewParty(gameData, _partySeed);
+        _sim = new SimEngine(_world, seed: unchecked((int)_partySeed));
         _router = new CommandRouter();
         _runner.Bind(_sim);
 
         ShowWorld(_world, () => _runner.RenderTick);
+
+        Log($"создана партия с seed {_partySeed}");
     }
 
     /// <summary>Показывает мир на экране: общая часть для одиночной игры, хоста и клиента.</summary>
