@@ -6,5 +6,7 @@ public enum CommandError
     OutOfBounds,
     UnknownType,
     CellOccupied,
-    CellBlockedByResident
+    CellBlockedByResident,
+    UnknownBuilding,
+    InvalidAmount
 }

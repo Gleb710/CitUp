@@ -186,9 +186,18 @@ public sealed class World
             case ResidentWalkFinished finished:
                 ApplyWalkFinished(finished);
                 break;
+            case ResourceAdded added:
+                ApplyResourceAdded(added);
+                break;
             default:
                 throw new ArgumentException($"Неизвестное событие: {simEvent.GetType().Name}", nameof(simEvent));
         }
+    }
+    
+    private void ApplyResourceAdded(ResourceAdded e)
+    {
+        var stockpile = GetStockpile(e.BuildingId);
+        stockpile.AddResource(e.ResourceId, e.Amount);
     }
 
     private void ApplyBuildingBuilt(BuildingBuilt e)

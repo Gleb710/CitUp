@@ -3,6 +3,7 @@ namespace CitUp.Sim;
 public sealed class SimEngine
 {
     private readonly Queue<BuildCommand> _commands = new();
+    private readonly Queue<AddResourceCommand> _resourceCommands = new();
     private readonly Random _random;
 
     // Решения жителя (когда пойти в следующий раз) живут здесь, а не в World:
@@ -30,11 +31,50 @@ public sealed class SimEngine
         var results = new List<CommandResult>();
 
         ProcessCommands(events, results);
+        ProcessResourceCommands(events, results);
         UpdateResidents(events);
 
         return new StepResult(events, results);
     }
 
+    private void ProcessResourceCommands(
+        List<SimEvent> events,
+        List<CommandResult> results)
+    {
+        while (_resourceCommands.Count > 0)
+        {
+            var command = _resourceCommands.Dequeue();
+            var error = ValidateResourceCommand(command);
+
+            if (error == CommandError.None)
+            {
+                var added = new ResourceAdded(
+                    command.BuildingId,
+                    command.ResourceId,
+                    command.Amount);
+
+                World.Apply(added);
+                events.Add(added);
+            }
+
+            results.Add(new CommandResult(command.CommandId, error));
+        }
+    }
+
+    private CommandError ValidateResourceCommand(AddResourceCommand command)
+    {
+        if (World.FindBuilding(command.BuildingId) is null)
+            return CommandError.UnknownBuilding;
+
+        if (command.Amount <= 0)
+            return CommandError.InvalidAmount;
+
+        return CommandError.None;
+    }
+    
+    public void Enqueue(AddResourceCommand command) =>
+        _resourceCommands.Enqueue(command);
+    
     private void ProcessCommands(List<SimEvent> events, List<CommandResult> results)
     {
         while (_commands.Count > 0)
