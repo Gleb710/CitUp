@@ -1,7 +1,7 @@
 {
   "map": {
-    "width": 90,
-    "height": 90
+    "width": 80,
+    "height": 100
   },
   "lakeCount": 3,
   "minLakeSize": 8,
