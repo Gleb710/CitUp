@@ -1,0 +1,15 @@
+{
+  "map": {
+    "width": 32,
+    "height": 32
+  },
+  "lakeCount": 3,
+  "minLakeSize": 8,
+  "maxLakeSize": 20,
+  "cliffClusterCount": 4,
+  "minCliffSize": 6,
+  "maxCliffSize": 16,
+  "resourceVeinCount": 3,
+  "forestClusterCount": 12,
+  "slopeChance": 0.35
+}
