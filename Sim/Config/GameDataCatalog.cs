@@ -9,7 +9,8 @@ public sealed record GameDataCatalog(
     BuildingCatalog Buildings,
     RecipeCatalog Recipes,
     ProfessionCatalog Professions,
-    StartupConfiguration Startup)
+    StartupConfiguration Startup,
+    MapGenerationSettings MapGeneration)
 {
     public static GameDataCatalog LoadDefault() =>
         FromFiles(
@@ -17,14 +18,30 @@ public sealed record GameDataCatalog(
             GameData.LoadText("buildings.json"),
             GameData.LoadText("recipes.json"),
             GameData.LoadText("professions.json"),
-            GameData.LoadText("startup.json"));
+            GameData.LoadText("startup.json"),
+            GameData.LoadText("map_generation.json"));
 
     public static GameDataCatalog FromFiles(
         string resourcesJson,
         string buildingsJson,
         string recipesJson,
         string professionsJson,
-        string startupJson)
+        string startupJson) =>
+        FromFiles(
+            resourcesJson,
+            buildingsJson,
+            recipesJson,
+            professionsJson,
+            startupJson,
+            GameData.LoadText("map_generation.json"));
+
+    public static GameDataCatalog FromFiles(
+        string resourcesJson,
+        string buildingsJson,
+        string recipesJson,
+        string professionsJson,
+        string startupJson,
+        string mapGenerationJson)
     {
         var resources = ResourceCatalog.FromJson(resourcesJson);
         var buildings = BuildingCatalog.FromJson(buildingsJson, resources);
@@ -34,12 +51,14 @@ public sealed record GameDataCatalog(
             startupJson,
             buildings,
             resources);
+        var mapGeneration = MapGenerationSettingsLoader.FromJson(mapGenerationJson);
 
         return new GameDataCatalog(
             resources,
             buildings,
             recipes,
             professions,
-            startup);
+            startup,
+            mapGeneration);
     }
 }

@@ -113,4 +113,30 @@ public class GameDataCatalogTests
 
         Assert.Contains("Data/startup.json", exception.Message);
     }
+    
+    [Fact]
+    public void LoadDefault_HasMapGenerationSettings()
+    {
+        var gameData = GameDataCatalog.LoadDefault();
+
+        Assert.Equal(32, gameData.MapGeneration.Width);
+        Assert.Equal(32, gameData.MapGeneration.Height);
+        Assert.Equal(3, gameData.MapGeneration.LakeCount);
+        Assert.Equal(12, gameData.MapGeneration.ForestClusterCount);
+    }
+
+    [Fact]
+    public void FromFiles_BrokenMapGenerationJson_ThrowsClearError()
+    {
+        var exception = Assert.Throws<InvalidDataException>(
+            () => GameDataCatalog.FromFiles(
+                GameData.LoadText("resources.json"),
+                GameData.LoadText("buildings.json"),
+                GameData.LoadText("recipes.json"),
+                GameData.LoadText("professions.json"),
+                GameData.LoadText("startup.json"),
+                "{ not json"));
+
+        Assert.Contains("Data/map_generation.json", exception.Message);
+    }
 }
