@@ -81,4 +81,45 @@ public class WorldTests
 
         Assert.Throws<InvalidDataException>(() => WorldConfig.FromJson(json));
     }
+    
+    [Fact]
+    public void World_WithoutTerrain_CreatesPlainTerrain()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+
+        Assert.Equal(world.Width, world.Terrain.Width);
+        Assert.Equal(world.Height, world.Terrain.Height);
+
+        for (var y = 0; y < world.Height; y++)
+        {
+            for (var x = 0; x < world.Width; x++)
+            {
+                Assert.Equal(
+                    TerrainType.Plain,
+                    world.Terrain.GetTerrain(new Cell(x, y)));
+            }
+        }
+    }
+
+    [Fact]
+    public void World_WithTerrain_UsesProvidedTerrain()
+    {
+        var terrain = new TerrainGrid(32, 32);
+        var cell = new Cell(5, 7);
+
+        terrain.SetTerrain(cell, TerrainType.Water);
+
+        var world = new World(WorldConfig.LoadDefault(), terrain);
+
+        Assert.Equal(TerrainType.Water, world.Terrain.GetTerrain(cell));
+    }
+
+    [Fact]
+    public void World_WithWrongTerrainSize_Throws()
+    {
+        var terrain = new TerrainGrid(16, 16);
+
+        Assert.Throws<ArgumentException>(
+            () => new World(WorldConfig.LoadDefault(), terrain));
+    }
 }

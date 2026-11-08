@@ -8,6 +8,7 @@ public sealed class World
     private readonly List<Resident> _residents = new();
 
     public WorldConfig Config { get; }
+    public TerrainGrid Terrain { get; }
     public int Width => Config.Map.Width;
     public int Height => Config.Map.Height;
 
@@ -21,13 +22,40 @@ public sealed class World
     public int NextBuildingId { get; private set; } = 1;
 
     public World(WorldConfig config)
+        : this(config, new TerrainGrid(config.Map.Width, config.Map.Height))
     {
-        Config = config;
-
-        // Начальное состояние: один житель в центре карты. Это не событие, он есть сразу при создании мира.
-        _residents.Add(new Resident(1, new Cell(Width / 2, Height / 2)));
     }
 
+    public World(WorldConfig config, TerrainGrid terrain)
+    {
+        if (terrain.Width != config.Map.Width ||
+            terrain.Height != config.Map.Height)
+        {
+            throw new ArgumentException(
+                $"Размер карты {terrain.Width}×{terrain.Height} не совпадает " +
+                $"с размером из конфигурации {config.Map.Width}×{config.Map.Height}.",
+                nameof(terrain));
+        }
+
+        Config = config;
+        Terrain = terrain;
+
+        CreateInitialResident();
+    }
+
+    private void CreateInitialResident()
+    {
+        var center = new Cell(
+            Config.Map.Width / 2,
+            Config.Map.Height / 2);
+
+        var resident = new Resident(
+            1,
+            center);
+
+        _residents.Add(resident);
+    }
+    
     public bool IsInside(Cell cell) =>
         cell.X >= 0 && cell.Y >= 0 && cell.X < Width && cell.Y < Height;
 
