@@ -575,4 +575,36 @@ public class MapGenerationTests
 
         Assert.True(mapsAreDifferent);
     }
+    
+    [Fact]
+    public void CreateNewParty_GivesStartingResourcesToPlayer()
+    {
+        var gameData = GameDataCatalog.LoadDefault();
+        var world = PartyFactory.CreateNewParty(gameData, 12345);
+
+        var report = world.GetResourceReport(1);
+
+        Assert.Equal(
+            gameData.Startup.StartingMoney,
+            report.Money);
+
+        foreach (var resource in gameData.Startup.StartingResources)
+        {
+            Assert.Equal(
+                resource.Amount,
+                report.Stockpile[resource.ResourceId]);
+        }
+    }
+
+    [Fact]
+    public void CreateNewParty_DoesNotGiveStartingResourcesToOtherPlayers()
+    {
+        var gameData = GameDataCatalog.LoadDefault();
+        var world = PartyFactory.CreateNewParty(gameData, 12345);
+
+        var report = world.GetResourceReport(2);
+
+        Assert.Equal(0, report.Money);
+        Assert.Empty(report.Stockpile);
+    }
 }

@@ -20,6 +20,19 @@ public static class PartyFactory
                 $"не совпадает с размером из настроек генерации {options.Width}×{options.Height}.");
         }
 
-        return new World(worldConfig, terrain);
+        var world = new World(worldConfig, terrain);
+
+        var playerStockpile = world.GetPlayerStockpile(1);
+
+        if (gameData.Startup.StartingMoney > 0)
+            playerStockpile.AddMoney(gameData.Startup.StartingMoney);
+
+        foreach (var resource in gameData.Startup.StartingResources)
+        {
+            if (resource.Amount > 0)
+                playerStockpile.AddResource(resource.ResourceId, resource.Amount);
+        }
+
+        return world;
     }
 }
