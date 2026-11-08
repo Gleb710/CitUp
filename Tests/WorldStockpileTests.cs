@@ -186,4 +186,57 @@ public sealed class WorldStockpileTests
                 "wood",
                 -1));
     }
+    
+    [Fact]
+    public void ResourceReport_ReturnsPlayerMoneyAndStockpile()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+        var stockpile = world.GetPlayerStockpile(1);
+
+        stockpile.AddMoney(1000);
+        stockpile.AddResource("wood", 50);
+
+        var report = world.GetResourceReport(1);
+
+        Assert.Equal(1000, report.Money);
+        Assert.Equal(50, report.Stockpile["wood"]);
+        Assert.Empty(report.LocalStockpiles);
+    }
+
+    [Fact]
+    public void ResourceReport_AggregatesLocalStockpiles()
+    {
+        var (world, engine) = Create();
+
+        engine.Enqueue(Cmd(1, "house", 10, 10));
+        engine.Enqueue(Cmd(2, "house", 12, 10));
+        engine.Step();
+
+        var firstBuilding = world.BuildingAt(new Cell(10, 10));
+        var secondBuilding = world.BuildingAt(new Cell(12, 10));
+
+        Assert.NotNull(firstBuilding);
+        Assert.NotNull(secondBuilding);
+
+        world.GetStockpile(firstBuilding!).AddResource("wood", 6);
+        world.GetStockpile(secondBuilding!).AddResource("wood", 6);
+
+        var report = world.GetResourceReport(1);
+
+        Assert.Equal(12, report.LocalStockpiles["wood"]);
+        Assert.Equal(0, report.Stockpile.GetValueOrDefault("wood"));
+    }
+
+    [Fact]
+    public void ResourceReport_DoesNotIncludeOtherPlayers()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+
+        world.GetPlayerStockpile(1).AddMoney(1000);
+        world.GetPlayerStockpile(2).AddMoney(500);
+
+        var report = world.GetResourceReport(1);
+
+        Assert.Equal(1000, report.Money);
+    }
 }

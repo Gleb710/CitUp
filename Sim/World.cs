@@ -133,6 +133,28 @@ public sealed class World
         return true;
     }
     
+    public ResourceReport GetResourceReport(int ownerId)
+    {
+        var playerStockpile = GetPlayerStockpile(ownerId);
+        var localStockpiles = new Dictionary<string, int>();
+
+        foreach (var building in _buildings.Where(building => building.OwnerId == ownerId))
+        {
+            var stockpile = GetStockpile(building);
+
+            foreach (var (resourceId, amount) in stockpile.Resources)
+            {
+                localStockpiles[resourceId] =
+                    localStockpiles.GetValueOrDefault(resourceId) + amount;
+            }
+        }
+
+        return new ResourceReport(
+            playerStockpile.Money,
+            playerStockpile.Resources,
+            localStockpiles);
+    }
+    
     public ResourceStore GetStockpile(int buildingId)
     {
         var building = FindBuilding(buildingId)
