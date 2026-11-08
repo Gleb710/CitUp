@@ -101,6 +101,38 @@ public sealed class World
         return stockpile;
     }
     
+    public bool TryMoveResource(
+        ResourceStore source,
+        ResourceStore target,
+        string resourceId,
+        int amount)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+
+        if (string.IsNullOrWhiteSpace(resourceId))
+            throw new ArgumentException(
+                "Идентификатор ресурса не может быть пустым.",
+                nameof(resourceId));
+
+        if (amount <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(amount),
+                amount,
+                "Количество перемещаемого ресурса должно быть больше 0.");
+
+        if (ReferenceEquals(source, target))
+            throw new ArgumentException(
+                "Нельзя перемещать ресурс в тот же склад.",
+                nameof(target));
+
+        if (!source.TryTakeResource(resourceId, amount))
+            return false;
+
+        target.AddResource(resourceId, amount);
+        return true;
+    }
+    
     public ResourceStore GetStockpile(int buildingId)
     {
         var building = FindBuilding(buildingId)

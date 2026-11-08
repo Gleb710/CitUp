@@ -102,4 +102,88 @@ public sealed class WorldStockpileTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => world.GetPlayerStockpile(0));
     }
+    
+    [Fact]
+    public void MoveResource_FromBuildingToPlayer_Works()
+    {
+        var (world, engine) = Create();
+
+        engine.Enqueue(Cmd(1, "house", 10, 10));
+        engine.Step();
+
+        var building = world.BuildingAt(new Cell(10, 10));
+        Assert.NotNull(building);
+
+        var buildingStockpile = world.GetStockpile(building!);
+        var playerStockpile = world.GetPlayerStockpile(1);
+
+        buildingStockpile.AddResource("wood", 10);
+
+        var result = world.TryMoveResource(
+            buildingStockpile,
+            playerStockpile,
+            "wood",
+            6);
+
+        Assert.True(result);
+        Assert.Equal(4, buildingStockpile.GetResourceAmount("wood"));
+        Assert.Equal(6, playerStockpile.GetResourceAmount("wood"));
+    }
+
+    [Fact]
+    public void MoveResource_WithoutEnoughResource_DoesNothing()
+    {
+        var (world, engine) = Create();
+
+        engine.Enqueue(Cmd(1, "house", 10, 10));
+        engine.Step();
+
+        var building = world.BuildingAt(new Cell(10, 10));
+        Assert.NotNull(building);
+
+        var buildingStockpile = world.GetStockpile(building!);
+        var playerStockpile = world.GetPlayerStockpile(1);
+
+        buildingStockpile.AddResource("wood", 3);
+
+        var result = world.TryMoveResource(
+            buildingStockpile,
+            playerStockpile,
+            "wood",
+            6);
+
+        Assert.False(result);
+        Assert.Equal(3, buildingStockpile.GetResourceAmount("wood"));
+        Assert.Equal(0, playerStockpile.GetResourceAmount("wood"));
+    }
+
+    [Fact]
+    public void MoveResource_ToSameStockpile_Throws()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+        var stockpile = world.GetPlayerStockpile(1);
+
+        Assert.Throws<ArgumentException>(
+            () => world.TryMoveResource(
+                stockpile,
+                stockpile,
+                "wood",
+                1));
+    }
+
+    [Fact]
+    public void MoveResource_NegativeAmount_Throws()
+    {
+        var world = new World(WorldConfig.LoadDefault());
+
+        var source = world.GetPlayerStockpile(1);
+        var target = world.GetPlayerStockpile(2);
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => world.TryMoveResource(
+                source,
+                target,
+                "wood",
+                -1));
+    }
 }
