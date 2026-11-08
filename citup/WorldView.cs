@@ -10,17 +10,11 @@ public partial class WorldView : Node2D
 {
     private const float BlockHeight = 12f;   // насколько «столбик» здания приподнят над землёй
 
-    private static readonly Color GrassA = new(0.35f, 0.56f, 0.30f);
-    private static readonly Color GrassB = new(0.32f, 0.52f, 0.28f);
-    private static readonly Color GridLine = new(0f, 0f, 0f, 0.15f);
-    private static readonly Color ForestColor = new(0.18f, 0.38f, 0.18f);
-    private static readonly Color SlopeColor = new(0.62f, 0.52f, 0.35f);
-    private static readonly Color CliffColor = new(0.55f, 0.55f, 0.58f);
-    private static readonly Color ResourceCliffColor = new(0.72f, 0.58f, 0.25f);
-    private static readonly Color WaterColor = new(0.20f, 0.45f, 0.80f);
     private static readonly Color HoverFill = new(1f, 1f, 1f, 0.35f);
     private static readonly Color UnknownType = new(0.7f, 0.7f, 0.7f);
-
+    
+    private TerrainView? _terrainView;
+    
     // Цвета рамок по номеру игрока: игрок 1, 2, 3, ...
     private static readonly Color[] OwnerColors =
     {
@@ -39,6 +33,16 @@ public partial class WorldView : Node2D
         _world = world;
         foreach (var type in world.Config.BuildingTypes)
             _typeColors[type.Id] = Color.FromHtml(type.Color);
+        _terrainView ??= new TerrainView();
+
+        if (_terrainView.GetParent() is null)
+        {
+            _terrainView.ShowBehindParent = true;
+            AddChild(_terrainView);
+        }
+
+        _terrainView.Bind(world.Terrain);
+
         _bound = true;
         QueueRedraw();
     }
@@ -46,6 +50,8 @@ public partial class WorldView : Node2D
     /// <summary>Отвязывает мир: слой перестаёт рисовать карту (выход в меню).</summary>
     public void Unbind()
     {
+        _terrainView?.Unbind();
+
         _bound = false;
         HoverCell = null;
         _typeColors.Clear();
@@ -73,52 +79,12 @@ public partial class WorldView : Node2D
         if (!_bound)
             return;
 
-        for (int y = 0; y < _world.Height; y++)
-        {
-            for (int x = 0; x < _world.Width; x++)
-            {
-                var cell = new Cell(x, y);
-                var diamond = IsoGrid.CellDiamond(cell);
-
-                DrawColoredPolygon(diamond, GetTerrainColor(cell));
-                DrawPolyline(
-                    new[] { diamond[0], diamond[1], diamond[2], diamond[3], diamond[0] },
-                    GridLine,
-                    1f);
-            }
-        }
-
         if (HoverCell is Cell hover)
             DrawColoredPolygon(IsoGrid.CellDiamond(hover), HoverFill);
 
         // Здания рисуем от дальних к ближним (по возрастанию x+y), чтобы ближние перекрывали дальние
         foreach (var building in _world.Buildings.OrderBy(b => b.Cell.X + b.Cell.Y))
             DrawBuilding(building);
-    }
-
-    private Color GetTerrainColor(Cell cell)
-    {
-        var terrain = _world.Terrain.GetTerrain(cell);
-        var color = GetBaseTerrainColor(terrain, cell);
-
-        var elevation = _world.Terrain.GetElevation(cell);
-        var darkening = System.Math.Min(elevation * 0.08f, 0.35f);
-
-        return color.Darkened(darkening);
-    }
-
-    private Color GetBaseTerrainColor(TerrainType terrain, Cell cell)
-    {
-        return terrain switch
-        {
-            TerrainType.Plain => (cell.X + cell.Y) % 2 == 0 ? GrassA : GrassB,
-            TerrainType.Forest => ForestColor,
-            TerrainType.Slope => SlopeColor,
-            TerrainType.Cliff => CliffColor,
-            TerrainType.ResourceCliff => ResourceCliffColor,
-            TerrainType.Water => WaterColor,
-            _ => UnknownType
-        };
     }
     
     private void DrawBuilding(Building building)
