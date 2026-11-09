@@ -110,4 +110,58 @@ public class WorldTests
         Assert.Throws<ArgumentException>(
             () => new World(WorldConfig.LoadDefault(), terrain));
     }
+    
+    [Fact]
+    public void Config_LoadsBuildingSizes()
+    {
+        var config = WorldConfig.LoadDefault();
+
+        var house = config.FindBuildingType("house");
+        var woodcutter = config.FindBuildingType("woodcutter");
+        var well = config.FindBuildingType("well");
+
+        Assert.NotNull(house);
+        Assert.NotNull(woodcutter);
+        Assert.NotNull(well);
+
+        Assert.Equal(2, house!.FootprintWidth);
+        Assert.Equal(2, house.FootprintHeight);
+        Assert.Equal(4, house.ClearanceWidth);
+        Assert.Equal(4, house.ClearanceHeight);
+
+        Assert.Equal(3, woodcutter!.FootprintWidth);
+        Assert.Equal(3, woodcutter.FootprintHeight);
+        Assert.Equal(5, woodcutter.ClearanceWidth);
+        Assert.Equal(5, woodcutter.ClearanceHeight);
+
+        Assert.Equal(2, well!.FootprintWidth);
+        Assert.Equal(2, well.FootprintHeight);
+        Assert.Equal(4, well.ClearanceWidth);
+        Assert.Equal(4, well.ClearanceHeight);
+    }
+
+    [Fact]
+    public void Config_ClearanceSmallerThanFootprint_Throws()
+    {
+        var json = """
+                   {
+                     "ticksPerSecond": 10,
+                     "resident": { "ticksPerCell": 5, "pauseTicks": 20 },
+                     "buildingTypes": [
+                       {
+                         "id": "house",
+                         "name": "Дом",
+                         "color": "#c0504d",
+                         "footprintWidth": 3,
+                         "footprintHeight": 3,
+                         "clearanceWidth": 2,
+                         "clearanceHeight": 2
+                       }
+                     ]
+                   }
+                   """;
+
+        Assert.Throws<InvalidDataException>(
+            () => WorldConfig.FromJson(json));
+    }
 }

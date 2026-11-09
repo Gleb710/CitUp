@@ -26,6 +26,12 @@ public sealed class WorldConfig
         public string Id { get; set; } = "";
         public string Name { get; set; } = "";
         public string Color { get; set; } = "#ffffff";
+        
+        
+        public int FootprintWidth { get; set; } = 1;
+        public int FootprintHeight { get; set; } = 1;
+        public int ClearanceWidth { get; set; } = 1;
+        public int ClearanceHeight { get; set; } = 1;
     }
 
     private static readonly JsonSerializerOptions Options = new()
@@ -81,5 +87,21 @@ public sealed class WorldConfig
             throw new InvalidDataException("buildingTypes не должен быть пустым.");
         if (BuildingTypes.Select(t => t.Id).Distinct().Count() != BuildingTypes.Count)
             throw new InvalidDataException("В buildingTypes есть повторяющиеся id.");
+        
+        foreach (var building in BuildingTypes)
+        {
+            if (building.FootprintWidth <= 0 || building.FootprintHeight <= 0)
+                throw new InvalidDataException(
+                    $"Для здания {building.Id} размеры Footprint должны быть больше 0.");
+
+            if (building.ClearanceWidth <= 0 || building.ClearanceHeight <= 0)
+                throw new InvalidDataException(
+                    $"Для здания {building.Id} размеры Clearance должны быть больше 0.");
+
+            if (building.ClearanceWidth < building.FootprintWidth ||
+                building.ClearanceHeight < building.FootprintHeight)
+                throw new InvalidDataException(
+                    $"Для здания {building.Id} Clearance не может быть меньше Footprint.");
+        }
     }
 }

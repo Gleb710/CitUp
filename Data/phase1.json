@@ -2,8 +2,32 @@
   "ticksPerSecond": 10,
   "resident": { "ticksPerCell": 5, "pauseTicks": 20 },
   "buildingTypes": [
-    { "id": "house",      "name": "Дом",      "color": "#c0504d" },
-    { "id": "woodcutter", "name": "Дровосек", "color": "#4f8a3c" },
-    { "id": "well",       "name": "Колодец",  "color": "#3c78c0" }
+    {
+      "id": "house",
+      "name": "Дом",
+      "color": "#c0504d",
+      "footprintWidth": 2,
+      "footprintHeight": 2,
+      "clearanceWidth": 4,
+      "clearanceHeight": 4
+    },
+    {
+      "id": "woodcutter",
+      "name": "Дровосек",
+      "color": "#4f8a3c",
+      "footprintWidth": 3,
+      "footprintHeight": 3,
+      "clearanceWidth": 5,
+      "clearanceHeight": 5
+    },
+    {
+      "id": "well",
+      "name": "Колодец",
+      "color": "#3c78c0",
+      "footprintWidth": 2,
+      "footprintHeight": 2,
+      "clearanceWidth": 4,
+      "clearanceHeight": 4
+    }
   ]
 }
