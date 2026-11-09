@@ -29,4 +29,40 @@ public sealed record BuildingMask(IReadOnlyList<string> Rows)
             _ => BuildingMaskCell.None
         };
     }
+    
+    /// <summary>
+    /// Возвращает мировые клетки указанного типа.
+    /// origin — мировая клетка, соответствующая позиции (0, 0) этой маски.
+    /// Не обрезает результат по границам карты.
+    /// </summary>
+    public IReadOnlyList<Cell> GetWorldCells(
+        Cell origin,
+        BuildingMaskCell cellType)
+    {
+        if (!Enum.IsDefined(typeof(BuildingMaskCell), cellType) ||
+            cellType == BuildingMaskCell.None)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(cellType),
+                cellType,
+                "Нужно указать непустой тип клетки маски.");
+        }
+
+        var cells = new List<Cell>();
+
+        for (var y = 0; y < Height; y++)
+        {
+            for (var x = 0; x < Width; x++)
+            {
+                if (GetCell(x, y) != cellType)
+                    continue;
+
+                cells.Add(new Cell(
+                    checked(origin.X + x),
+                    checked(origin.Y + y)));
+            }
+        }
+
+        return cells.AsReadOnly();
+    }
 }
