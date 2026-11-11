@@ -5,7 +5,7 @@ public sealed class World
 {
     private readonly List<Building> _buildings = new();
     private readonly Dictionary<Cell, Building> _buildingByCell = new();
-    private readonly Dictionary<int, ResourceStore> _stockpilesByBuildingId = new();
+    private readonly Dictionary<Cell, Building> _footprintByCell = new();    private readonly Dictionary<int, ResourceStore> _stockpilesByBuildingId = new();
     private readonly Dictionary<int, ResourceStore> _stockpilesByOwnerId = new();
     private readonly List<Resident> _residents = new();
 
@@ -66,9 +66,12 @@ public sealed class World
     public bool IsInside(Cell cell) =>
         cell.X >= 0 && cell.Y >= 0 && cell.X < Width && cell.Y < Height;
 
-    /// <summary>Здание в клетке или null, если клетка свободна.</summary>
+    /// <summary>Здание, чья непроходимая часть (F) занимает клетку, или null.</summary>
     public Building? BuildingAt(Cell cell) => _buildingByCell.GetValueOrDefault(cell);
 
+    /// <summary>Здание, чей Footprint (F или P) занимает клетку, или null.</summary>
+    public Building? FootprintAt(Cell cell) => _footprintByCell.GetValueOrDefault(cell);
+    
     public BuildingDefinition GetDefinition(Building building)
     {
         ArgumentNullException.ThrowIfNull(building);
@@ -86,6 +89,34 @@ public sealed class World
     
     public Building? FindBuilding(int buildingId) =>
         _buildings.FirstOrDefault(building => building.Id == buildingId);
+    
+    private void RegisterBuilding(Building building)
+    {
+        var definition = GetDefinition(building);
+        var blocked = BuildingGeometry.GetBlockedCells(definition, building.Cell);
+        var passable = BuildingGeometry.GetPassableCells(definition, building.Cell);
+        var footprint = blocked.Concat(passable).ToArray();
+
+        foreach (var cell in footprint)
+        {
+            if (!IsInside(cell))
+                throw new InvalidOperationException(
+                    $"Здание {building.Id} выходит за границы карты, клетка {cell}.");
+
+            if (_footprintByCell.TryGetValue(cell, out var other))
+                throw new InvalidOperationException(
+                    $"Здание {building.Id} пересекается со зданием {other.Id}, клетка {cell}. " +
+                    "Возможен рассинхрон миров.");
+        }
+
+        foreach (var cell in blocked)
+            _buildingByCell[cell] = building;
+
+        foreach (var cell in footprint)
+            _footprintByCell[cell] = building;
+
+        _buildings.Add(building);
+    }
     
     public ResourceStore GetStockpile(Building building)
     {
@@ -222,13 +253,8 @@ public sealed class World
 
     private void ApplyBuildingBuilt(BuildingBuilt e)
     {
-        if (_buildingByCell.ContainsKey(e.Cell))
-            throw new InvalidOperationException(
-                $"Событие BuildingBuilt для занятой клетки {e.Cell}. Возможен рассинхрон миров.");
-
         var building = new Building(e.BuildingId, e.Type, e.Cell, e.OwnerId);
-        _buildings.Add(building);
-        _buildingByCell[e.Cell] = building;
+        RegisterBuilding(building);
         NextBuildingId = Math.Max(NextBuildingId, e.BuildingId + 1);
     }
 
@@ -283,15 +309,19 @@ public sealed class World
 
         _buildings.Clear();
         _buildingByCell.Clear();
+        _footprintByCell.Clear();
         _residents.Clear();   // конструктор уже создал жителя по умолчанию, в снимке жители свои
 
         foreach (var building in snapshot.Buildings)
         {
-            if (!IsInside(building.Cell))
-                throw new InvalidDataException($"Снимок: здание {building.Id} вне карты, клетка {building.Cell}.");
-            if (!_buildingByCell.TryAdd(building.Cell, building))
-                throw new InvalidDataException($"Снимок: две постройки в одной клетке {building.Cell}.");
-            _buildings.Add(building);
+            try
+            {
+                RegisterBuilding(building);
+            }
+            catch (InvalidOperationException exception)
+            {
+                throw new InvalidDataException($"Снимок: {exception.Message}", exception);
+            }
         }
 
         foreach (var data in snapshot.Residents)

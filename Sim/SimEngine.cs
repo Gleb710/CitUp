@@ -97,12 +97,24 @@ public sealed class SimEngine
     {
         if (World.Config.FindBuildingType(command.BuildingType) is null)
             return CommandError.UnknownType;
-        if (!World.IsInside(command.Cell))
+
+        var definition = World.BuildingCatalog.FindBuilding(command.BuildingType);
+        if (definition is null)
+            return CommandError.UnknownType;
+
+        var blocked = BuildingGeometry.GetBlockedCells(definition, command.Cell);
+        var passable = BuildingGeometry.GetPassableCells(definition, command.Cell);
+        var footprint = blocked.Concat(passable).ToArray();
+
+        if (footprint.Any(cell => !World.IsInside(cell)))
             return CommandError.OutOfBounds;
-        if (World.BuildingAt(command.Cell) is not null)
+
+        if (footprint.Any(cell => World.FootprintAt(cell) is not null))
             return CommandError.CellOccupied;
-        if (World.IsBlockedByResident(command.Cell))
+
+        if (blocked.Any(World.IsBlockedByResident))
             return CommandError.CellBlockedByResident;
+
         return CommandError.None;
     }
 

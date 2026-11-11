@@ -102,7 +102,7 @@ public class BuildCommandTests
         var (world, engine) = Create();
 
         engine.Enqueue(Cmd(1, "house", 1, 1));
-        engine.Enqueue(Cmd(2, "well", 2, 2));
+        engine.Enqueue(Cmd(2, "well", 10, 10));
         engine.Step();
 
         Assert.Equal(new[] { 1, 2 }, world.Buildings.Select(b => b.Id).ToArray());

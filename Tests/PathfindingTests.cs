@@ -44,13 +44,16 @@ public class PathfindingTests
     public void Path_GoesAroundBuilding()
     {
         var world = NewWorld();
-        Build(world, 1, 1, 0);
+        Build(world, 1, 1, 1);
 
-        var path = GridPathfinder.FindPath(world, new Cell(0, 0), new Cell(2, 0));
+        var path = GridPathfinder.FindPath(world, new Cell(0, 1), new Cell(3, 1));
 
         Assert.NotNull(path);
-        Assert.Equal(5, path.Count);
-        Assert.DoesNotContain(new Cell(1, 0), path);
+        Assert.Equal(6, path.Count);
+        Assert.DoesNotContain(new Cell(1, 1), path);
+        Assert.DoesNotContain(new Cell(2, 1), path);
+        Assert.DoesNotContain(new Cell(1, 2), path);
+        Assert.DoesNotContain(new Cell(2, 2), path);
         AssertContiguous(path);
     }
 
@@ -59,9 +62,11 @@ public class PathfindingTests
     {
         var world = NewWorld();
         Build(world, 1, 1, 0);
-        Build(world, 2, 0, 1);
+        Build(world, 2, 3, 1);
+        Build(world, 3, 2, 3);
+        Build(world, 4, 0, 2);
 
-        var path = GridPathfinder.FindPath(world, new Cell(0, 0), new Cell(5, 5));
+        var path = GridPathfinder.FindPath(world, new Cell(2, 2), new Cell(10, 10));
 
         Assert.Null(path);
     }
