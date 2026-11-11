@@ -57,6 +57,9 @@ public sealed class BuildingCatalog
                 building.ConstructionTimeTicks))
             .ToArray();
 
+        foreach (var building in buildings)
+            ValidateGeometry(building);
+        
         return new BuildingCatalog(buildings);
     }
 
@@ -126,6 +129,33 @@ public sealed class BuildingCatalog
         }
     }
 
+    private static void ValidateGeometry(BuildingDefinition building)
+    {
+        var origin = new Cell(0, 0);
+
+        IReadOnlyList<Cell> footprint;
+        IReadOnlyList<Cell> clearance;
+
+        try
+        {
+            footprint = BuildingGeometry.GetFootprintCells(building, origin);
+            clearance = BuildingGeometry.GetClearanceCells(building, origin);
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new InvalidDataException(
+                $"В Data/buildings.json у здания {building.Id} маски нельзя совместить: {exception.Message}",
+                exception);
+        }
+
+        var overlap = footprint.Intersect(clearance).Cast<Cell?>().FirstOrDefault();
+
+        if (overlap is not null)
+            throw new InvalidDataException(
+                $"В Data/buildings.json у здания {building.Id} footprint и clearance " +
+                $"пересекаются в клетке {overlap}.");
+    }
+    
     private static void ValidateCost(
         BuildingData building,
         ResourceCatalog resources)

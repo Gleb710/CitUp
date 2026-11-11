@@ -168,9 +168,9 @@
       "constructionTimeTicks": 3000,
       "footprint": [
         "....",
-        "....",
         ".FF.",
-        ".FF."
+        ".FF.",
+        "...."
       ],
       "clearance": [
         "CCCC",

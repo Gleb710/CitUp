@@ -82,7 +82,7 @@ public sealed class BuildingGeometryTests
     }
 
     [Fact]
-    public void Mine_PreservesFootprintOffset()
+    public void Mine_FootprintIsSurroundedByClearance()
     {
         var mine = GetBuilding("mine");
         var origin = new Cell(10, 20);
@@ -93,13 +93,13 @@ public sealed class BuildingGeometryTests
         Assert.Equal(4, footprint.Count);
         Assert.Equal(12, clearance.Count);
 
-        Assert.Contains(new Cell(11, 22), footprint);
-        Assert.Contains(new Cell(12, 23), footprint);
-        Assert.Contains(new Cell(10, 20), clearance);
+        Assert.Contains(new Cell(11, 21), footprint);
+        Assert.Contains(new Cell(12, 22), footprint);
 
-        // В текущих данных нижний ряд Footprint шахты
-        // пересекается с нижним рядом её Clearance.
-        Assert.Equal(2, footprint.Intersect(clearance).Count());
+        Assert.Contains(new Cell(10, 20), clearance);
+        Assert.Contains(new Cell(13, 23), clearance);
+
+        Assert.Empty(footprint.Intersect(clearance));
     }
 
     [Fact]
