@@ -13,7 +13,9 @@ public sealed record BuildingDefinition(
     BuildingMask? Access,
     IReadOnlyList<int> Rotations,
     BuildingCost Cost,
-    int ConstructionTimeTicks)
+    int ConstructionTimeTicks,
+    string Color = "#ffffff",
+    bool Buildable = true)
 {
     public int Width => Footprint.Width;
 

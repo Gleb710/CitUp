@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace CitUp.Sim;
 
@@ -7,11 +8,16 @@ public sealed class BuildingCatalog
 {
     private readonly Dictionary<string, BuildingDefinition> _buildingsById;
 
+    private static readonly Regex ColorPattern = new("^#[0-9a-fA-F]{6}$");
+
+    public IReadOnlyList<BuildingDefinition> BuildableBuildings { get; }
+    
     public IReadOnlyList<BuildingDefinition> Buildings { get; }
 
     public BuildingCatalog(IReadOnlyList<BuildingDefinition> buildings)
     {
         Buildings = buildings;
+        BuildableBuildings = buildings.Where(building => building.Buildable).ToArray();
         _buildingsById = buildings.ToDictionary(building => building.Id);
     }
 
@@ -54,7 +60,9 @@ public sealed class BuildingCatalog
                 building.Access is null ? null : new BuildingMask(building.Access),
                 building.Rotations,
                 CreateCost(building),
-                building.ConstructionTimeTicks))
+                building.ConstructionTimeTicks,
+                building.Color,
+                building.Buildable))
             .ToArray();
 
         foreach (var building in buildings)
@@ -104,6 +112,10 @@ public sealed class BuildingCatalog
                 throw new InvalidDataException(
                     $"В Data/buildings.json у здания {building.Id} отсутствует name.");
 
+            if (!ColorPattern.IsMatch(building.Color ?? ""))
+                throw new InvalidDataException(
+                    $"В Data/buildings.json у здания {building.Id} цвет должен быть в формате #RRGGBB.");
+            
             ValidateMask(
                 building.Id,
                 "footprint",
@@ -277,6 +289,10 @@ public sealed class BuildingCatalog
         public List<string>? Access { get; set; }
 
         public List<int> Rotations { get; set; } = new();
+        
+        public string Color { get; set; } = "#ffffff";
+
+        public bool Buildable { get; set; } = true;
     }
 
     private sealed class BuildingCostData

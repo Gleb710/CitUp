@@ -3,6 +3,8 @@
     {
       "id": "townhall",
       "name": "Ратуша",
+      "color": "#d4af37", 
+      "buildable": false,
       "cost": {
             "money": 0,
             "resources": {}
@@ -32,6 +34,7 @@
     {
       "id": "house",
       "name": "Дом",
+      "color": "#c0504d",
       "cost": {
             "money": 180,
             "resources": {
@@ -54,6 +57,7 @@
     {
       "id": "well",
       "name": "Колодец",
+      "color": "#3c78c0",
       "cost": {
             "money": 140,
             "resources": {
@@ -77,6 +81,7 @@
     {
       "id": "woodcutter",
       "name": "Хижина дровосека",
+      "color": "#4f8a3c",
       "cost": {
             "money": 120,
             "resources": {
@@ -100,6 +105,7 @@
     {
       "id": "sawmill",
       "name": "Лесопилка",
+      "color": "#8b5a2b",
       "cost": {
             "money": 350,
             "resources": {
@@ -125,6 +131,7 @@
     {
       "id": "fisherman",
       "name": "Хижина рыбака",
+      "color": "#2f9fb0",
       "cost": {
             "money": 100,
             "resources": {
@@ -158,6 +165,7 @@
     {
       "id": "mine",
       "name": "Шахта",
+      "color": "#6b6b6b",
       "cost": {
             "money": 200,
             "resources": {
