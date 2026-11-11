@@ -18,4 +18,8 @@ public sealed record BuildingDefinition(
     public int Width => Footprint.Width;
 
     public int Height => Footprint.Height;
+    
+    /// <summary>Разрешён ли поворот. 0° доступен любому зданию.</summary>
+    public bool SupportsRotation(int rotation) =>
+        rotation == 0 || Rotations.Contains(rotation);
 }

@@ -65,4 +65,46 @@ public sealed record BuildingMask(IReadOnlyList<string> Rows)
 
         return cells.AsReadOnly();
     }
+    
+    /// <summary>Поворот маски по часовой стрелке на 0, 90, 180 или 270 градусов.</summary>
+    public BuildingMask Rotate(int degrees)
+    {
+        if (degrees is not (0 or 90 or 180 or 270))
+            throw new ArgumentOutOfRangeException(
+                nameof(degrees),
+                degrees,
+                "Допустимы повороты 0, 90, 180 и 270 градусов.");
+
+        if (degrees == 0)
+            return this;
+
+        var width = Width;
+        var height = Height;
+        var newWidth = degrees == 180 ? width : height;
+        var newHeight = degrees == 180 ? height : width;
+
+        var grid = new char[newHeight][];
+        for (var y = 0; y < newHeight; y++)
+        {
+            grid[y] = new char[newWidth];
+            Array.Fill(grid[y], '.');
+        }
+
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < Rows[y].Length; x++)
+            {
+                var (newX, newY) = degrees switch
+                {
+                    90 => (height - 1 - y, x),
+                    180 => (width - 1 - x, height - 1 - y),
+                    _ => (y, width - 1 - x)
+                };
+
+                grid[newY][newX] = Rows[y][x];
+            }
+        }
+
+        return new BuildingMask(grid.Select(row => new string(row)).ToArray());
+    }
 }

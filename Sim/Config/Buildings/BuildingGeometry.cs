@@ -1,77 +1,77 @@
 namespace CitUp.Sim;
 
 /// <summary>
-/// Геометрия здания без поворота.
-/// Origin соответствует позиции (0, 0) маски Footprint.
-/// Остальные маски совмещаются с Footprint по центру.
+/// Геометрия здания. Origin соответствует позиции (0, 0) повёрнутой маски Footprint.
+/// Остальные маски поворачиваются так же и совмещаются с Footprint по центру.
 /// </summary>
 public static class BuildingGeometry
 {
     public static IReadOnlyList<Cell> GetBlockedCells(
         BuildingDefinition building,
-        Cell origin)
+        Cell origin,
+        int rotation = 0)
     {
         ArgumentNullException.ThrowIfNull(building);
 
-        return building.Footprint.GetWorldCells(
+        return building.Footprint.Rotate(rotation).GetWorldCells(
             origin,
             BuildingMaskCell.Footprint);
     }
 
     public static IReadOnlyList<Cell> GetPassableCells(
         BuildingDefinition building,
-        Cell origin)
+        Cell origin,
+        int rotation = 0)
     {
         ArgumentNullException.ThrowIfNull(building);
 
-        return building.Footprint.GetWorldCells(
+        return building.Footprint.Rotate(rotation).GetWorldCells(
             origin,
             BuildingMaskCell.PassableFootprint);
     }
 
     public static IReadOnlyList<Cell> GetFootprintCells(
         BuildingDefinition building,
-        Cell origin)
+        Cell origin,
+        int rotation = 0)
     {
         ArgumentNullException.ThrowIfNull(building);
 
-        return GetBlockedCells(building, origin)
-            .Concat(GetPassableCells(building, origin))
+        return GetBlockedCells(building, origin, rotation)
+            .Concat(GetPassableCells(building, origin, rotation))
             .ToArray();
     }
 
     public static IReadOnlyList<Cell> GetClearanceCells(
         BuildingDefinition building,
-        Cell origin)
+        Cell origin,
+        int rotation = 0)
     {
         ArgumentNullException.ThrowIfNull(building);
 
-        var maskOrigin = GetAlignedOrigin(
-            building.Footprint,
-            building.Clearance,
-            origin);
+        var footprint = building.Footprint.Rotate(rotation);
+        var clearance = building.Clearance.Rotate(rotation);
 
-        return building.Clearance.GetWorldCells(
-            maskOrigin,
+        return clearance.GetWorldCells(
+            GetAlignedOrigin(footprint, clearance, origin),
             BuildingMaskCell.Clearance);
     }
 
     public static IReadOnlyList<Cell> GetAccessCells(
         BuildingDefinition building,
-        Cell origin)
+        Cell origin,
+        int rotation = 0)
     {
         ArgumentNullException.ThrowIfNull(building);
 
         if (building.Access is null)
             return Array.Empty<Cell>();
 
-        var maskOrigin = GetAlignedOrigin(
-            building.Footprint,
-            building.Access,
-            origin);
+        var footprint = building.Footprint.Rotate(rotation);
+        var access = building.Access.Rotate(rotation);
 
-        return building.Access.GetWorldCells(
-            maskOrigin,
+        return access.GetWorldCells(
+            GetAlignedOrigin(footprint, access, origin),
             BuildingMaskCell.Access);
     }
 
