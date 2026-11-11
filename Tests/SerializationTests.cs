@@ -54,6 +54,17 @@ public class SerializationTests
 
         Assert.Equal(command, back.Command);
     }
+    
+    [Fact]
+    public void Command_RoundTrips_IncludingRotation()
+    {
+        var command = new BuildCommand(5, 2, "fisherman", new Cell(5, 7), 90);
+
+        var back = AssertRoundTrips(new CommandMessage(command));
+
+        Assert.Equal(90, back.Command.Rotation);
+        Assert.Equal(command, back.Command);
+    }
 
     [Fact]
     public void CommandRejected_RoundTrips_AndErrorIsReadableInJson()
@@ -73,13 +84,14 @@ public class SerializationTests
         {
             new BuildingBuilt(1, "house", new Cell(3, 4), 2),
             new ResidentWalkStarted(1, new[] { new Cell(16, 16), new Cell(17, 16) }, 120),
-            new ResidentWalkFinished(1, new Cell(17, 16))
+            new ResidentWalkFinished(1, new Cell(17, 16)),
+            new BuildingBuilt(2, "fisherman", new Cell(8, 9), 2, 90)
         };
 
         var back = AssertRoundTrips(new EventsMessage(121, events));
 
         Assert.Equal(121, back.Tick);
-        Assert.Equal(3, back.Events.Count);
+        Assert.Equal(4, back.Events.Count);
         Assert.Equal(events[0], back.Events[0]);
 
         var started = Assert.IsType<ResidentWalkStarted>(back.Events[1]);
@@ -87,6 +99,8 @@ public class SerializationTests
         Assert.Equal(120, started.StartTick);
 
         Assert.Equal(events[2], back.Events[2]);
+        Assert.Equal(events[3], back.Events[3]);
+        Assert.Equal(90, Assert.IsType<BuildingBuilt>(back.Events[3]).Rotation);
     }
 
     [Fact]

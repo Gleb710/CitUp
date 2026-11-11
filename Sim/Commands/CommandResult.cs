@@ -17,6 +17,7 @@ public sealed record CommandResult(int CommandId, CommandError Error)
         CommandError.ClearanceBlocked => "Слишком близко к другому зданию",
         CommandError.InvalidTerrain => "Здесь нельзя строить: неподходящая местность",
         CommandError.UnevenTerrain => "Для здания нужна ровная площадка одной высоты",
+        CommandError.InvalidRotation => "Это здание нельзя так повернуть",
         CommandError.CellBlockedByResident => "Клетка на пути жителя",
         _ => "Неизвестная ошибка",
     };

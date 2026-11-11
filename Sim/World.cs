@@ -86,10 +86,10 @@ public sealed class World
     }
 
     public IReadOnlyList<Cell> GetFootprintCells(Building building) =>
-        BuildingGeometry.GetFootprintCells(GetDefinition(building), building.Cell);
+        BuildingGeometry.GetFootprintCells(GetDefinition(building), building.Cell, building.Rotation);
 
     public IReadOnlyList<Cell> GetClearanceCells(Building building) =>
-        BuildingGeometry.GetClearanceCells(GetDefinition(building), building.Cell);
+        BuildingGeometry.GetClearanceCells(GetDefinition(building), building.Cell, building.Rotation);
     
     public Building? FindBuilding(int buildingId) =>
         _buildings.FirstOrDefault(building => building.Id == buildingId);
@@ -97,10 +97,15 @@ public sealed class World
     private void RegisterBuilding(Building building)
     {
         var definition = GetDefinition(building);
-        var blocked = BuildingGeometry.GetBlockedCells(definition, building.Cell);
-        var passable = BuildingGeometry.GetPassableCells(definition, building.Cell);
+
+        if (!definition.SupportsRotation(building.Rotation))
+            throw new InvalidOperationException(
+                $"Здание {building.Id} ({building.Type}) нельзя повернуть на {building.Rotation}°.");
+
+        var blocked = BuildingGeometry.GetBlockedCells(definition, building.Cell, building.Rotation);
+        var passable = BuildingGeometry.GetPassableCells(definition, building.Cell, building.Rotation);
         var footprint = blocked.Concat(passable).ToArray();
-        var clearance = BuildingGeometry.GetClearanceCells(definition, building.Cell);
+        var clearance = BuildingGeometry.GetClearanceCells(definition, building.Cell, building.Rotation);
         
         foreach (var cell in footprint)
         {
@@ -269,7 +274,7 @@ public sealed class World
 
     private void ApplyBuildingBuilt(BuildingBuilt e)
     {
-        var building = new Building(e.BuildingId, e.Type, e.Cell, e.OwnerId);
+        var building = new Building(e.BuildingId, e.Type, e.Cell, e.OwnerId, e.Rotation);        
         RegisterBuilding(building);
         NextBuildingId = Math.Max(NextBuildingId, e.BuildingId + 1);
     }
@@ -371,6 +376,7 @@ public sealed class World
             hash = Mix(hash, building.Cell.X);
             hash = Mix(hash, building.Cell.Y);
             hash = Mix(hash, building.OwnerId);
+            hash = Mix(hash, building.Rotation);
         }
 
         foreach (var resident in _residents)

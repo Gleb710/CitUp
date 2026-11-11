@@ -84,7 +84,13 @@ public sealed class SimEngine
 
             if (error == CommandError.None)
             {
-                var built = new BuildingBuilt(World.NextBuildingId, command.BuildingType, command.Cell, command.PlayerId);
+                var built = new BuildingBuilt(
+                    World.NextBuildingId,
+                    command.BuildingType,
+                    command.Cell,
+                    command.PlayerId,
+                    command.Rotation);
+
                 World.Apply(built);
                 events.Add(built);
             }
@@ -102,10 +108,13 @@ public sealed class SimEngine
         if (definition is null)
             return CommandError.UnknownType;
 
-        var blocked = BuildingGeometry.GetBlockedCells(definition, command.Cell);
-        var passable = BuildingGeometry.GetPassableCells(definition, command.Cell);
+        if (!definition.SupportsRotation(command.Rotation))
+            return CommandError.InvalidRotation;
+
+        var blocked = BuildingGeometry.GetBlockedCells(definition, command.Cell, command.Rotation);
+        var passable = BuildingGeometry.GetPassableCells(definition, command.Cell, command.Rotation);
         var footprint = blocked.Concat(passable).ToArray();
-        var clearance = BuildingGeometry.GetClearanceCells(definition, command.Cell);
+        var clearance = BuildingGeometry.GetClearanceCells(definition, command.Cell, command.Rotation);
         var buildArea = footprint.Concat(clearance).ToArray();
 
         if (footprint.Any(cell => !World.IsInside(cell)))
@@ -176,7 +185,8 @@ public sealed class SimEngine
 
         var blockedCells = BuildingGeometry.GetBlockedCells(
             World.GetDefinition(target),
-            target.Cell);
+            target.Cell,
+            target.Rotation);
 
         var goals = new List<Cell>();
         var seen = new HashSet<Cell>();

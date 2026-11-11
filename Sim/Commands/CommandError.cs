@@ -11,5 +11,6 @@ public enum CommandError
     InvalidAmount,
     ClearanceBlocked,
     InvalidTerrain,
-    UnevenTerrain
+    UnevenTerrain,
+    InvalidRotation
 }

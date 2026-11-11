@@ -506,7 +506,12 @@ public partial class Main : Node2D
         }
 
         int hostCommandId = _router.Register(peerId, incoming.CommandId);
-        _sim.Enqueue(new BuildCommand(hostCommandId, playerId, incoming.BuildingType, incoming.Cell));
+        _sim.Enqueue(new BuildCommand(
+            hostCommandId,
+            playerId,
+            incoming.BuildingType,
+            incoming.Cell,
+            incoming.Rotation));
         Log($"команда игрока {playerId}: {incoming.BuildingType} в {incoming.Cell}");
     }
 
@@ -920,12 +925,21 @@ public partial class Main : Node2D
             return;
         }
 
+        var house = _world.BuildingCatalog.FindBuilding("house");
+        if (house is null)
+        {
+            _hud.ShowMessage("ОТЛАДКА: в каталоге нет дома, мир не испорчен");
+            return;
+        }
+
         for (int y = 0; y < _world.Height; y++)
         {
             for (int x = 0; x < _world.Width; x++)
             {
                 var cell = new Cell(x, y);
-                if (_world.BuildingAt(cell) is not null)
+                var footprint = BuildingGeometry.GetFootprintCells(house, cell);
+
+                if (footprint.Any(c => !_world.IsInside(c) || _world.FootprintAt(c) is not null))
                     continue;
 
                 _world.Apply(new BuildingBuilt(_world.NextBuildingId, "house", cell, 99));
