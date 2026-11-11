@@ -106,9 +106,16 @@ public sealed class SimEngine
         var passable = BuildingGeometry.GetPassableCells(definition, command.Cell);
         var footprint = blocked.Concat(passable).ToArray();
         var clearance = BuildingGeometry.GetClearanceCells(definition, command.Cell);
+        var buildArea = footprint.Concat(clearance).ToArray();
 
         if (footprint.Any(cell => !World.IsInside(cell)))
             return CommandError.OutOfBounds;
+
+        if (!TerrainRules.IsPlainOnly(World.Terrain, buildArea))
+            return CommandError.InvalidTerrain;
+
+        if (!TerrainRules.HasSingleElevation(World.Terrain, buildArea))
+            return CommandError.UnevenTerrain;
 
         if (footprint.Any(cell => World.FootprintAt(cell) is not null))
             return CommandError.CellOccupied;
@@ -116,7 +123,7 @@ public sealed class SimEngine
         if (clearance.Any(cell => World.FootprintAt(cell) is not null) ||
             footprint.Any(World.IsInClearance))
             return CommandError.ClearanceBlocked;
-        
+
         if (blocked.Any(World.IsBlockedByResident))
             return CommandError.CellBlockedByResident;
 

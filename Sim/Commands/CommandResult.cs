@@ -15,6 +15,8 @@ public sealed record CommandResult(int CommandId, CommandError Error)
         CommandError.UnknownBuilding => "Здание не найдено",
         CommandError.InvalidAmount => "Некорректное количество ресурса",
         CommandError.ClearanceBlocked => "Слишком близко к другому зданию",
+        CommandError.InvalidTerrain => "Здесь нельзя строить: неподходящая местность",
+        CommandError.UnevenTerrain => "Для здания нужна ровная площадка одной высоты",
         CommandError.CellBlockedByResident => "Клетка на пути жителя",
         _ => "Неизвестная ошибка",
     };

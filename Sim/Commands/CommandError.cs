@@ -9,5 +9,7 @@ public enum CommandError
     CellBlockedByResident,
     UnknownBuilding,
     InvalidAmount,
-    ClearanceBlocked
+    ClearanceBlocked,
+    InvalidTerrain,
+    UnevenTerrain
 }
