@@ -209,11 +209,11 @@ public sealed class WorldStockpileTests
         var (world, engine) = Create();
 
         engine.Enqueue(Cmd(1, "house", 10, 10));
-        engine.Enqueue(Cmd(2, "house", 12, 10));
+        engine.Enqueue(Cmd(2, "house", 14, 10));
         engine.Step();
 
         var firstBuilding = world.BuildingAt(new Cell(10, 10));
-        var secondBuilding = world.BuildingAt(new Cell(12, 10));
+        var secondBuilding = world.BuildingAt(new Cell(14, 10));
 
         Assert.NotNull(firstBuilding);
         Assert.NotNull(secondBuilding);

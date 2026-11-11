@@ -130,4 +130,72 @@ public sealed class BuildingPlacementTests
         Assert.Throws<InvalidDataException>(
             () => World.FromSnapshot(config, snapshot));
     }
+    
+    [Fact]
+    public void HouseInsideAnotherClearance_IsRejected()
+    {
+        var (_, engine) = Create();
+
+        engine.Enqueue(Cmd(1, "house", 10, 10));
+        engine.Enqueue(Cmd(2, "house", 12, 10));
+        var result = engine.Step();
+
+        Assert.True(result.Results[0].Ok);
+        Assert.Equal(CommandError.ClearanceBlocked, result.Results[1].Error);
+    }
+
+    [Fact]
+    public void OverlappingClearance_IsAllowed()
+    {
+        var (_, engine) = Create();
+
+        engine.Enqueue(Cmd(1, "house", 10, 10));
+        engine.Enqueue(Cmd(2, "house", 13, 10));
+        var result = engine.Step();
+
+        Assert.True(result.Results[0].Ok);
+        Assert.True(result.Results[1].Ok);
+    }
+
+    [Fact]
+    public void ClearanceRule_DoesNotDependOnBuildOrder()
+    {
+        var (_, engine) = Create();
+
+        engine.Enqueue(Cmd(1, "house", 12, 10));
+        engine.Enqueue(Cmd(2, "house", 10, 10));
+        var result = engine.Step();
+
+        Assert.True(result.Results[0].Ok);
+        Assert.Equal(CommandError.ClearanceBlocked, result.Results[1].Error);
+    }
+
+    [Fact]
+    public void Snapshot_RestoresClearance()
+    {
+        var (world, engine) = Create();
+
+        engine.Enqueue(Cmd(1, "house", 10, 10));
+        engine.Step();
+
+        var restored = World.FromSnapshot(world.Config, world.ToSnapshot());
+        var restoredEngine = new SimEngine(restored, 1);
+
+        restoredEngine.Enqueue(Cmd(2, "house", 12, 10));
+        var result = restoredEngine.Step();
+
+        Assert.Equal(CommandError.ClearanceBlocked, result.Results[0].Error);
+    }
+
+    [Fact]
+    public void ClearanceOutsideMap_IsAllowedForNow()
+    {
+        var (world, engine) = Create();
+
+        engine.Enqueue(Cmd(1, "house", 0, 0));
+        var result = engine.Step();
+
+        Assert.True(result.Results[0].Ok);
+        Assert.NotNull(world.BuildingAt(new Cell(0, 0)));
+    }
 }

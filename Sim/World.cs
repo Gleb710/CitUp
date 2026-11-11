@@ -5,6 +5,7 @@ public sealed class World
 {
     private readonly List<Building> _buildings = new();
     private readonly Dictionary<Cell, Building> _buildingByCell = new();
+    private readonly Dictionary<Cell, List<Building>> _clearanceByCell = new();
     private readonly Dictionary<Cell, Building> _footprintByCell = new();    private readonly Dictionary<int, ResourceStore> _stockpilesByBuildingId = new();
     private readonly Dictionary<int, ResourceStore> _stockpilesByOwnerId = new();
     private readonly List<Resident> _residents = new();
@@ -72,6 +73,9 @@ public sealed class World
     /// <summary>Здание, чей Footprint (F или P) занимает клетку, или null.</summary>
     public Building? FootprintAt(Cell cell) => _footprintByCell.GetValueOrDefault(cell);
     
+    /// <summary>Попадает ли клетка в Clearance какого-либо здания.</summary>
+    public bool IsInClearance(Cell cell) => _clearanceByCell.ContainsKey(cell);
+    
     public BuildingDefinition GetDefinition(Building building)
     {
         ArgumentNullException.ThrowIfNull(building);
@@ -96,7 +100,8 @@ public sealed class World
         var blocked = BuildingGeometry.GetBlockedCells(definition, building.Cell);
         var passable = BuildingGeometry.GetPassableCells(definition, building.Cell);
         var footprint = blocked.Concat(passable).ToArray();
-
+        var clearance = BuildingGeometry.GetClearanceCells(definition, building.Cell);
+        
         foreach (var cell in footprint)
         {
             if (!IsInside(cell))
@@ -115,6 +120,17 @@ public sealed class World
         foreach (var cell in footprint)
             _footprintByCell[cell] = building;
 
+        foreach (var cell in clearance)
+        {
+            if (!_clearanceByCell.TryGetValue(cell, out var owners))
+            {
+                owners = new List<Building>();
+                _clearanceByCell[cell] = owners;
+            }
+
+            owners.Add(building);
+        }
+        
         _buildings.Add(building);
     }
     
@@ -311,7 +327,8 @@ public sealed class World
         _buildingByCell.Clear();
         _footprintByCell.Clear();
         _residents.Clear();   // конструктор уже создал жителя по умолчанию, в снимке жители свои
-
+        _clearanceByCell.Clear();
+        
         foreach (var building in snapshot.Buildings)
         {
             try

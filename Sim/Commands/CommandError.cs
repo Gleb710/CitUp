@@ -8,5 +8,6 @@ public enum CommandError
     CellOccupied,
     CellBlockedByResident,
     UnknownBuilding,
-    InvalidAmount
+    InvalidAmount,
+    ClearanceBlocked
 }
