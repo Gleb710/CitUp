@@ -24,4 +24,21 @@ public sealed record BuildingDefinition(
     /// <summary>Разрешён ли поворот. 0° доступен любому зданию.</summary>
     public bool SupportsRotation(int rotation) =>
         rotation == 0 || Rotations.Contains(rotation);
+    
+    /// <summary>Есть ли у здания хоть один поворот, кроме 0°.</summary>
+    public bool CanRotate => Rotations.Any(rotation => rotation != 0);
+
+    /// <summary>Следующий разрешённый поворот по кругу: 0, 90, 180, 270. Для зданий без поворотов всегда 0.</summary>
+    public int NextRotation(int current)
+    {
+        for (var step = 1; step <= 4; step++)
+        {
+            var candidate = (current + 90 * step) % 360;
+
+            if (SupportsRotation(candidate))
+                return candidate;
+        }
+
+        return 0;
+    }
 }

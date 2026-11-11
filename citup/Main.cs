@@ -67,6 +67,7 @@ public partial class Main : Node2D
     private int _localPlayerId = PlayerRegistry.HostPlayerId;
     private string _playerName = "Игрок";
     private int _selectedTypeIndex;
+    private int _selectedRotation;
 
     public override void _Ready()
     {
@@ -210,7 +211,7 @@ public partial class Main : Node2D
         if (recenterCamera)
             GetNode<Camera2D>("Camera2D").Position = IsoGrid.MapCenter(world);
 
-        _hud.ShowSelection(world.Config, _selectedTypeIndex);
+        RefreshSelection();
     }
 
     /// <summary>Выход в стартовое меню: закрываем соединение и убираем весь мир.</summary>
@@ -891,18 +892,22 @@ public partial class Main : Node2D
 
         if (@event is InputEventKey { Pressed: true, Echo: false } key)
         {
-            int index = key.Keycode switch
-            {
-                Key.Key1 => 0,
-                Key.Key2 => 1,
-                Key.Key3 => 2,
-                _ => -1
-            };
+            var menu = _world.BuildingCatalog.BuildableBuildings;
 
-            if (index >= 0 && index < _world.Config.BuildingTypes.Count)
+            int index = key.Keycode >= Key.Key1 && key.Keycode <= Key.Key9
+                ? (int)key.Keycode - (int)Key.Key1
+                : -1;
+
+            if (index >= 0 && index < menu.Count)
             {
                 _selectedTypeIndex = index;
-                _hud.ShowSelection(_world.Config, _selectedTypeIndex);
+                _selectedRotation = 0;
+                RefreshSelection();
+            }
+            else if (key.Keycode == Key.R && menu.Count > 0)
+            {
+                _selectedRotation = menu[_selectedTypeIndex].NextRotation(_selectedRotation);
+                RefreshSelection();
             }
         }
         else if (@event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
@@ -950,6 +955,24 @@ public partial class Main : Node2D
             }
         }
     }
+    
+    private void RefreshSelection()
+    {
+        if (_world is null)
+            return;
+
+        var menu = _world.BuildingCatalog.BuildableBuildings;
+        if (menu.Count == 0)
+            return;
+
+        if (_selectedTypeIndex >= menu.Count)
+        {
+            _selectedTypeIndex = 0;
+            _selectedRotation = 0;
+        }
+
+        _hud.ShowSelection(menu, _selectedTypeIndex, _selectedRotation, menu[_selectedTypeIndex].CanRotate);
+    }
 
     /// <summary>
     /// Игрок не меняет мир сам: он только отправляет команду.
@@ -957,8 +980,12 @@ public partial class Main : Node2D
     /// </summary>
     private void SubmitBuild(Cell cell)
     {
-        var typeId = _world!.Config.BuildingTypes[_selectedTypeIndex].Id;
+        var menu = _world!.BuildingCatalog.BuildableBuildings;
+        if (menu.Count == 0)
+            return;
 
+        var typeId = menu[_selectedTypeIndex].Id;
+        
         if (_mode == Mode.Client)
         {
             if (_connectionLost)
@@ -967,8 +994,7 @@ public partial class Main : Node2D
                 return;
             }
 
-            var command = new BuildCommand(_nextCommandId++, _localPlayerId, typeId, cell);
-            _net.SendToHost(new CommandMessage(command));
+            var command = new BuildCommand(_nextCommandId++, _localPlayerId, typeId, cell, _selectedRotation);            _net.SendToHost(new CommandMessage(command));
             return;
         }
 
@@ -977,7 +1003,7 @@ public partial class Main : Node2D
 
         // Собственные клики хоста идут тем же путём, что и клиентские, только без сети
         int hostCommandId = _router.Register(CommandRouter.LocalSource, 0);
-        _sim.Enqueue(new BuildCommand(hostCommandId, _localPlayerId, typeId, cell));
+        _sim.Enqueue(new BuildCommand(hostCommandId, _localPlayerId, typeId, cell, _selectedRotation));
     }
 
     /// <summary>Вызывается после каждого тика симуляции (у одиночной игры и у хоста).</summary>

@@ -101,11 +101,8 @@ public sealed class SimEngine
 
     private CommandError Validate(BuildCommand command)
     {
-        if (World.Config.FindBuildingType(command.BuildingType) is null)
-            return CommandError.UnknownType;
-
         var definition = World.BuildingCatalog.FindBuilding(command.BuildingType);
-        if (definition is null)
+        if (definition is null || !definition.Buildable)
             return CommandError.UnknownType;
 
         if (!definition.SupportsRotation(command.Rotation))

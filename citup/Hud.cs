@@ -1,4 +1,5 @@
 using Godot;
+using System.Collections.Generic;
 
 namespace CitUp.Game;
 
@@ -63,15 +64,24 @@ public partial class Hud : CanvasLayer
     }
 
     /// <summary>Показывает, какое здание выбрано. Выбранное в квадратных скобках.</summary>
-    public void ShowSelection(Sim.WorldConfig config, int selectedIndex)
+    public void ShowSelection(
+        IReadOnlyList<Sim.BuildingDefinition> buildings,
+        int selectedIndex,
+        int rotation,
+        bool canRotate)
     {
         string text = "Строить: ";
-        for (int i = 0; i < config.BuildingTypes.Count; i++)
+        for (int i = 0; i < buildings.Count; i++)
         {
-            string name = config.BuildingTypes[i].Name;
+            string name = buildings[i].Name;
             text += i == selectedIndex ? $"[{i + 1} {name}]  " : $"{i + 1} {name}  ";
         }
-        _hint.Text = text + "|  ЛКМ: поставить";
+
+        text += "|  ЛКМ: поставить";
+        if (canRotate)
+            text += $"  |  R: повернуть (сейчас {rotation}°)";
+
+        _hint.Text = text;
     }
 
     /// <summary>Показывает сообщение на 2 секунды.</summary>
