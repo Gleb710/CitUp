@@ -174,13 +174,28 @@ public sealed class SimEngine
 
         var target = buildings[_random.Next(buildings.Count)];
 
+        var blockedCells = BuildingGeometry.GetBlockedCells(
+            World.GetDefinition(target),
+            target.Cell);
+
         var goals = new List<Cell>();
-        foreach (var d in GridPathfinder.Directions)
+        var seen = new HashSet<Cell>();
+
+        foreach (var blockedCell in blockedCells)
         {
-            var neighbor = new Cell(target.Cell.X + d.X, target.Cell.Y + d.Y);
-            if (neighbor != resident.Cell && GridPathfinder.IsWalkable(World, neighbor))
+            foreach (var d in GridPathfinder.Directions)
+            {
+                var neighbor = new Cell(blockedCell.X + d.X, blockedCell.Y + d.Y);
+
+                if (neighbor == resident.Cell ||
+                    !GridPathfinder.IsWalkable(World, neighbor) ||
+                    !seen.Add(neighbor))
+                    continue;
+
                 goals.Add(neighbor);
+            }
         }
+
         if (goals.Count == 0)
             return null;
 

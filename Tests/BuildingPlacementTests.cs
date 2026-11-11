@@ -198,4 +198,35 @@ public sealed class BuildingPlacementTests
         Assert.True(result.Results[0].Ok);
         Assert.NotNull(world.BuildingAt(new Cell(0, 0)));
     }
+    
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void ResidentWalk_GoesNextToBuilding(int seed)
+    {
+        var world = new World(WorldConfig.LoadDefault());
+        var engine = new SimEngine(world, seed);
+
+        engine.Enqueue(Cmd(1, "woodcutter", 10, 10));
+        engine.Step();
+
+        var building = world.BuildingAt(new Cell(10, 10));
+        Assert.NotNull(building);
+
+        ResidentWalkStarted? started = null;
+        for (var i = 0; i < 2000 && started is null; i++)
+            started = engine.Step().Events.OfType<ResidentWalkStarted>().FirstOrDefault();
+
+        Assert.NotNull(started);
+
+        var goal = started!.Path[started.Path.Count - 1];
+        var footprint = world.GetFootprintCells(building!);
+
+        Assert.DoesNotContain(goal, footprint);
+        Assert.Contains(footprint, cell =>
+            Math.Abs(cell.X - goal.X) + Math.Abs(cell.Y - goal.Y) == 1);
+    }
 }
