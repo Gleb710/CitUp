@@ -11,6 +11,7 @@ public sealed class World
 
     public WorldConfig Config { get; }
     public TerrainGrid Terrain { get; }
+    public BuildingCatalog BuildingCatalog { get; }
     public int Width => Config.Map.Width;
     public int Height => Config.Map.Height;
 
@@ -28,7 +29,10 @@ public sealed class World
     {
     }
 
-    public World(WorldConfig config, TerrainGrid terrain)
+    public World(
+        WorldConfig config,
+        TerrainGrid terrain,
+        BuildingCatalog? buildingCatalog = null)
     {
         if (terrain.Width != config.Map.Width ||
             terrain.Height != config.Map.Height)
@@ -41,6 +45,7 @@ public sealed class World
 
         Config = config;
         Terrain = terrain;
+        BuildingCatalog = buildingCatalog ?? BuildingCatalog.LoadDefault();
 
         CreateInitialResident();
     }
@@ -64,6 +69,21 @@ public sealed class World
     /// <summary>Здание в клетке или null, если клетка свободна.</summary>
     public Building? BuildingAt(Cell cell) => _buildingByCell.GetValueOrDefault(cell);
 
+    public BuildingDefinition GetDefinition(Building building)
+    {
+        ArgumentNullException.ThrowIfNull(building);
+
+        return BuildingCatalog.FindBuilding(building.Type)
+               ?? throw new InvalidOperationException(
+                   $"Тип здания {building.Type} отсутствует в каталоге зданий.");
+    }
+
+    public IReadOnlyList<Cell> GetFootprintCells(Building building) =>
+        BuildingGeometry.GetFootprintCells(GetDefinition(building), building.Cell);
+
+    public IReadOnlyList<Cell> GetClearanceCells(Building building) =>
+        BuildingGeometry.GetClearanceCells(GetDefinition(building), building.Cell);
+    
     public Building? FindBuilding(int buildingId) =>
         _buildings.FirstOrDefault(building => building.Id == buildingId);
     
