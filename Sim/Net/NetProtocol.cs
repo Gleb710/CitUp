@@ -6,5 +6,5 @@ public static class NetProtocol
     /// Увеличивать при любом изменении формата сообщений или данных в phase1.json.
     /// Хост сверяет версию в Hello (Issue 9).
     /// </summary>
-    public const int Version = 1;
+    public const int Version = 2;
 }

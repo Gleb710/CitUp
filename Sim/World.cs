@@ -6,7 +6,8 @@ public sealed class World
     private readonly List<Building> _buildings = new();
     private readonly Dictionary<Cell, Building> _buildingByCell = new();
     private readonly Dictionary<Cell, List<Building>> _clearanceByCell = new();
-    private readonly Dictionary<Cell, Building> _footprintByCell = new();    private readonly Dictionary<int, ResourceStore> _stockpilesByBuildingId = new();
+    private readonly Dictionary<Cell, Building> _footprintByCell = new();    
+    private readonly Dictionary<int, ResourceStore> _stockpilesByBuildingId = new();
     private readonly Dictionary<int, ResourceStore> _stockpilesByOwnerId = new();
     private readonly List<Resident> _residents = new();
 
@@ -313,12 +314,24 @@ public sealed class World
         CurrentTick,
         NextBuildingId,
         _buildings.ToList(),
-        _residents.Select(r => new ResidentSnapshot(r.Id, r.Cell, r.Path?.ToList(), r.WalkStartTick)).ToList());
+        _residents.Select(r => new ResidentSnapshot(r.Id, r.Cell, r.Path?.ToList(), r.WalkStartTick)).ToList(),
+        TerrainSnapshot.From(Terrain));
 
     /// <summary>Создаёт мир из снимка. Конфиг должен быть тем же, что у хоста.</summary>
     public static World FromSnapshot(WorldConfig config, WorldSnapshot snapshot)
     {
-        var world = new World(config);
+        var terrain = snapshot.Terrain?.ToGrid();
+
+        World world;
+        try
+        {
+            world = terrain is null ? new World(config) : new World(config, terrain);
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidDataException($"Снимок: {exception.Message}", exception);
+        }
+
         world.LoadSnapshot(snapshot);
         return world;
     }

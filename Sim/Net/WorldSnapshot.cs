@@ -8,4 +8,5 @@ public sealed record WorldSnapshot(
     long Tick,
     int NextBuildingId,
     IReadOnlyList<Building> Buildings,
-    IReadOnlyList<ResidentSnapshot> Residents);
+    IReadOnlyList<ResidentSnapshot> Residents,
+    TerrainSnapshot? Terrain = null);

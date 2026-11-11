@@ -246,4 +246,15 @@ public class SerializationTests
 
         Assert.Throws<InvalidDataException>(() => World.FromSnapshot(config, bad));
     }
+    
+    [Fact]
+    public void Welcome_ThroughJson_KeepsGeneratedTerrain()
+    {
+        var host = PartyFactory.CreateNewParty(GameDataCatalog.LoadDefault(), 12345);
+
+        var welcome = Assert.IsType<WelcomeMessage>(RoundTrip(new WelcomeMessage(2, host.ToSnapshot())));
+        var client = World.FromSnapshot(host.Config, welcome.Snapshot);
+
+        TerrainSnapshotTests.AssertSameTerrain(host.Terrain, client.Terrain);
+    }
 }
