@@ -1,0 +1,11 @@
+[33mcommit 4e52b3fbc3eeabc2667c0d95664426219f48596e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author:     Gleb <gleb527gleb@gmail.com>
+AuthorDate: Mon Nov 9 16:09:35 2026 +0300
+Commit:     Gleb <gleb527gleb@gmail.com>
+CommitDate: Mon Nov 9 16:09:35 2026 +0300
+
+    #20: Добавил совмещение масок и разделение клеток здания
+
+ Sim/Config/Buildings/BuildingGeometry.cs | 6 [32m++++++[m
+ Tests/BuildingGeometryTests.cs           | 6 [32m++++++[m
+ 2 files changed, 12 insertions(+)
